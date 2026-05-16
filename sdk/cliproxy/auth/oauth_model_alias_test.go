@@ -219,6 +219,14 @@ func TestOAuthModelAliasChannel_Kiro(t *testing.T) {
 	}
 }
 
+func TestOAuthModelAliasChannel_XAIOAuth(t *testing.T) {
+	t.Parallel()
+
+	if got := OAuthModelAliasChannel("xai-oauth", "oauth"); got != "xai-oauth" {
+		t.Fatalf("OAuthModelAliasChannel() = %q, want %q", got, "xai-oauth")
+	}
+}
+
 func TestApplyOAuthModelAlias_SuffixPreservation(t *testing.T) {
 	t.Parallel()
 

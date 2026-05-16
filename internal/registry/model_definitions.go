@@ -21,6 +21,8 @@ type staticModelsJSON struct {
 	CodexPro    []*ModelInfo `json:"codex-pro"`
 	Kimi        []*ModelInfo `json:"kimi"`
 	Antigravity []*ModelInfo `json:"antigravity"`
+	XAI         []*ModelInfo `json:"xai"`
+	XAIOAuth    []*ModelInfo `json:"xai-oauth"`
 }
 
 // GetClaudeModels returns the standard Claude model definitions.
@@ -76,6 +78,99 @@ func GetKimiModels() []*ModelInfo {
 // GetAntigravityModels returns the standard Antigravity model definitions.
 func GetAntigravityModels() []*ModelInfo {
 	return cloneModelInfos(getModels().Antigravity)
+}
+
+// GetXAIOAuthModels returns the standard xAI OAuth model definitions.
+func GetXAIOAuthModels() []*ModelInfo {
+	return effectiveXAIOAuthModels(getModels())
+}
+
+func effectiveXAIOAuthModels(data *staticModelsJSON) []*ModelInfo {
+	if data != nil {
+		if len(data.XAIOAuth) > 0 {
+			return normalizeXAIOAuthModels(data.XAIOAuth)
+		}
+		if len(data.XAI) > 0 {
+			return normalizeXAIOAuthModels(data.XAI)
+		}
+	}
+	return normalizeXAIOAuthModels(xaiOAuthBuiltinModels())
+}
+
+func normalizeXAIOAuthModels(models []*ModelInfo) []*ModelInfo {
+	out := cloneModelInfos(models)
+	for _, model := range out {
+		if model == nil {
+			continue
+		}
+		model.Type = "xai-oauth"
+		if strings.TrimSpace(model.OwnedBy) == "" {
+			model.OwnedBy = "xai"
+		}
+		if strings.TrimSpace(model.Object) == "" {
+			model.Object = "model"
+		}
+		if strings.TrimSpace(model.Name) == "" {
+			model.Name = model.ID
+		}
+	}
+	return out
+}
+
+func xaiOAuthBuiltinModels() []*ModelInfo {
+	return []*ModelInfo{
+		{
+			ID:                  "grok-4.3",
+			Object:              "model",
+			Created:             1776384000,
+			OwnedBy:             "xai",
+			Type:                "xai-oauth",
+			DisplayName:         "Grok 4.3",
+			Name:                "grok-4.3",
+			Description:         "Grok 4.3 via xAI OAuth Responses API",
+			ContextLength:       256000,
+			MaxCompletionTokens: 64000,
+		},
+		{
+			ID:                  "grok-4.20-0309-reasoning",
+			Object:              "model",
+			Created:             1773014400,
+			OwnedBy:             "xai",
+			Type:                "xai-oauth",
+			DisplayName:         "Grok 4.20 0309 Reasoning",
+			Name:                "grok-4.20-0309-reasoning",
+			Description:         "Grok 4.20 0309 reasoning model via xAI OAuth Responses API",
+			ContextLength:       256000,
+			MaxCompletionTokens: 64000,
+		},
+		{
+			ID:                  "grok-4.20-0309-non-reasoning",
+			Object:              "model",
+			Created:             1773014400,
+			OwnedBy:             "xai",
+			Type:                "xai-oauth",
+			DisplayName:         "Grok 4.20 0309 Non Reasoning",
+			Name:                "grok-4.20-0309-non-reasoning",
+			Description:         "Grok 4.20 0309 non-reasoning model via xAI OAuth Responses API",
+			ContextLength:       256000,
+			MaxCompletionTokens: 64000,
+		},
+		{
+			ID:                  "grok-4.20-multi-agent-0309",
+			Object:              "model",
+			Created:             1773014400,
+			OwnedBy:             "xai",
+			Type:                "xai-oauth",
+			DisplayName:         "Grok 4.20 Multi-Agent 0309",
+			Name:                "grok-4.20-multi-agent-0309",
+			Description:         "Grok 4.20 multi-agent model via xAI OAuth Responses API",
+			ContextLength:       256000,
+			MaxCompletionTokens: 64000,
+			Thinking: &ThinkingSupport{
+				Levels: []string{"low", "medium", "high"},
+			},
+		},
+	}
 }
 
 // WithCodexBuiltins injects hard-coded Codex-only model definitions that should
@@ -170,6 +265,7 @@ func cloneModelInfos(models []*ModelInfo) []*ModelInfo {
 //   - github-copilot
 //   - amazonq
 //   - antigravity (returns static overrides only)
+//   - xai-oauth
 func GetStaticModelDefinitionsByChannel(channel string) []*ModelInfo {
 	key := strings.ToLower(strings.TrimSpace(channel))
 	switch key {
@@ -197,6 +293,8 @@ func GetStaticModelDefinitionsByChannel(channel string) []*ModelInfo {
 		return GetAmazonQModels()
 	case "antigravity":
 		return GetAntigravityModels()
+	case "xai-oauth":
+		return GetXAIOAuthModels()
 	case "codebuddy":
 		return GetCodeBuddyModels()
 	case "cursor":
@@ -235,6 +333,7 @@ func LookupStaticModelInfo(modelID string) *ModelInfo {
 		data.CodexPro,
 		data.Kimi,
 		data.Antigravity,
+		effectiveXAIOAuthModels(data),
 		GetGitHubCopilotModels(),
 		GetKiroModels(),
 		GetKiloModels(),

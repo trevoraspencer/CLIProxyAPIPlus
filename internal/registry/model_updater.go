@@ -215,6 +215,7 @@ func detectChangedProviders(oldData, newData *staticModelsJSON) []string {
 		{"codex", oldData.CodexPro, newData.CodexPro},
 		{"kimi", oldData.Kimi, newData.Kimi},
 		{"antigravity", oldData.Antigravity, newData.Antigravity},
+		{"xai-oauth", effectiveXAIOAuthModels(oldData), effectiveXAIOAuthModels(newData)},
 	}
 
 	seen := make(map[string]bool, len(sections))
@@ -338,6 +339,21 @@ func validateModelsCatalog(data *staticModelsJSON) error {
 	}
 
 	for _, section := range requiredSections {
+		if err := validateModelSection(section.name, section.models); err != nil {
+			return err
+		}
+	}
+	optionalSections := []struct {
+		name   string
+		models []*ModelInfo
+	}{
+		{name: "xai", models: data.XAI},
+		{name: "xai-oauth", models: data.XAIOAuth},
+	}
+	for _, section := range optionalSections {
+		if len(section.models) == 0 {
+			continue
+		}
 		if err := validateModelSection(section.name, section.models); err != nil {
 			return err
 		}

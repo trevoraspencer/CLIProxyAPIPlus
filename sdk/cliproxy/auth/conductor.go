@@ -861,11 +861,19 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 	}
 	ctx = contextWithRequestedModelAlias(ctx, opts, routeModel)
 	var lastErr error
+	xaiOAuth401Retried := false
 	for idx, execModel := range execModels {
 		resultModel := m.stateModelForExecution(auth, routeModel, execModel, pooled)
 		execReq := req
 		execReq.Model = execModel
 		streamResult, errStream := executor.ExecuteStream(ctx, auth, execReq, opts)
+		if errStream != nil && shouldRetryXAIOAuthAfter401(provider, auth, errStream, xaiOAuth401Retried) {
+			xaiOAuth401Retried = true
+			if refreshed, ok := m.refreshXAIOAuthForRetry(ctx, executor, auth); ok {
+				auth = refreshed
+				streamResult, errStream = executor.ExecuteStream(ctx, auth, execReq, opts)
+			}
+		}
 		if errStream != nil {
 			if errCtx := ctx.Err(); errCtx != nil {
 				return nil, errCtx
@@ -1366,11 +1374,19 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 		}
 		attempted[auth.ID] = struct{}{}
 		var authErr error
+		xaiOAuth401Retried := false
 		for _, upstreamModel := range models {
 			resultModel := m.stateModelForExecution(auth, routeModel, upstreamModel, pooled)
 			execReq := req
 			execReq.Model = upstreamModel
 			resp, errExec := executor.Execute(execCtx, auth, execReq, opts)
+			if errExec != nil && shouldRetryXAIOAuthAfter401(provider, auth, errExec, xaiOAuth401Retried) {
+				xaiOAuth401Retried = true
+				if refreshed, ok := m.refreshXAIOAuthForRetry(execCtx, executor, auth); ok {
+					auth = refreshed
+					resp, errExec = executor.Execute(execCtx, auth, execReq, opts)
+				}
+			}
 			result := Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: errExec == nil}
 			if errExec != nil {
 				if errCtx := execCtx.Err(); errCtx != nil {
@@ -2495,6 +2511,84 @@ func isUnauthorizedError(err error) bool {
 	}
 	raw := strings.ToLower(err.Error())
 	return strings.Contains(raw, "status 401") || strings.Contains(raw, "401 unauthorized")
+}
+
+func shouldRetryXAIOAuthAfter401(provider string, auth *Auth, err error, alreadyRetried bool) bool {
+	if alreadyRetried || auth == nil || err == nil {
+		return false
+	}
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	if provider == "" {
+		provider = strings.ToLower(strings.TrimSpace(auth.Provider))
+	}
+	if provider != "xai-oauth" {
+		return false
+	}
+	if statusCodeFromError(err) != http.StatusUnauthorized {
+		return false
+	}
+	return xaiOAuthRefreshToken(auth) != ""
+}
+
+func (m *Manager) refreshXAIOAuthForRetry(ctx context.Context, executor ProviderExecutor, auth *Auth) (*Auth, bool) {
+	if m == nil || executor == nil || auth == nil {
+		return nil, false
+	}
+	refreshed, err := executor.Refresh(ctx, auth.Clone())
+	if err != nil {
+		log.Debugf("xai-oauth auth %s refresh before 401 retry failed: %v", auth.ID, err)
+		return nil, false
+	}
+	if refreshed == nil {
+		log.Debugf("xai-oauth auth %s refresh before 401 retry returned no auth", auth.ID)
+		return nil, false
+	}
+	if strings.TrimSpace(refreshed.ID) == "" {
+		refreshed.ID = auth.ID
+	}
+	if strings.TrimSpace(refreshed.Provider) == "" {
+		refreshed.Provider = auth.Provider
+	}
+	if xaiOAuthAccessToken(refreshed) == "" {
+		log.Debugf("xai-oauth auth %s refresh before 401 retry returned no access token", auth.ID)
+		return nil, false
+	}
+	updated, errUpdate := m.Update(ctx, refreshed)
+	if errUpdate != nil {
+		log.Debugf("xai-oauth auth %s refresh before 401 retry update failed: %v", auth.ID, errUpdate)
+		return nil, false
+	}
+	if updated == nil {
+		updated = refreshed
+	}
+	return updated, true
+}
+
+func xaiOAuthRefreshToken(auth *Auth) string {
+	if auth == nil || auth.Metadata == nil {
+		return ""
+	}
+	if value, ok := auth.Metadata["refresh_token"].(string); ok {
+		return strings.TrimSpace(value)
+	}
+	return ""
+}
+
+func xaiOAuthAccessToken(auth *Auth) string {
+	if auth == nil {
+		return ""
+	}
+	if auth.Metadata != nil {
+		if value, ok := auth.Metadata["access_token"].(string); ok {
+			if token := strings.TrimSpace(value); token != "" {
+				return token
+			}
+		}
+	}
+	if auth.Attributes != nil {
+		return strings.TrimSpace(auth.Attributes["access_token"])
+	}
+	return ""
 }
 
 func hasUnauthorizedAuthFailure(auth *Auth) bool {
