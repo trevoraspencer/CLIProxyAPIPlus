@@ -2054,49 +2054,6 @@
       "description": "Grok 4.3 via xAI OAuth Responses API",
       "context_length": 256000,
       "max_completion_tokens": 64000
-    },
-    {
-      "id": "grok-4.20-0309-reasoning",
-      "object": "model",
-      "created": 1773014400,
-      "owned_by": "xai",
-      "type": "xai-oauth",
-      "display_name": "Grok 4.20 0309 Reasoning",
-      "name": "grok-4.20-0309-reasoning",
-      "description": "Grok 4.20 0309 reasoning model via xAI OAuth Responses API",
-      "context_length": 256000,
-      "max_completion_tokens": 64000
-    },
-    {
-      "id": "grok-4.20-0309-non-reasoning",
-      "object": "model",
-      "created": 1773014400,
-      "owned_by": "xai",
-      "type": "xai-oauth",
-      "display_name": "Grok 4.20 0309 Non Reasoning",
-      "name": "grok-4.20-0309-non-reasoning",
-      "description": "Grok 4.20 0309 non-reasoning model via xAI OAuth Responses API",
-      "context_length": 256000,
-      "max_completion_tokens": 64000
-    },
-    {
-      "id": "grok-4.20-multi-agent-0309",
-      "object": "model",
-      "created": 1773014400,
-      "owned_by": "xai",
-      "type": "xai-oauth",
-      "display_name": "Grok 4.20 Multi-Agent 0309",
-      "name": "grok-4.20-multi-agent-0309",
-      "description": "Grok 4.20 multi-agent model via xAI OAuth Responses API",
-      "context_length": 256000,
-      "max_completion_tokens": 64000,
-      "thinking": {
-        "levels": [
-          "low",
-          "medium",
-          "high"
-        ]
-      }
     }
   ]
 }

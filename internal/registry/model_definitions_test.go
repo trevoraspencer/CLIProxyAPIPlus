@@ -57,18 +57,8 @@ func TestXAIOAuthStaticModels(t *testing.T) {
 	if findModelInfo(models, "grok-4.3") == nil {
 		t.Fatal("expected xai-oauth models to include grok-4.3")
 	}
-	if findModelInfo(models, "grok-4.20-0309-reasoning") == nil {
-		t.Fatal("expected xai-oauth models to include grok-4.20-0309-reasoning")
-	}
-	if findModelInfo(models, "grok-4.20-0309-non-reasoning") == nil {
-		t.Fatal("expected xai-oauth models to include grok-4.20-0309-non-reasoning")
-	}
-	multiAgent := findModelInfo(models, "grok-4.20-multi-agent-0309")
-	if multiAgent == nil {
-		t.Fatal("expected xai-oauth models to include grok-4.20-multi-agent-0309")
-	}
-	if multiAgent.Thinking == nil || len(multiAgent.Thinking.Levels) != 3 {
-		t.Fatalf("expected multi-agent model to expose low/medium/high thinking levels, got %+v", multiAgent.Thinking)
+	if len(models) != 1 {
+		t.Fatalf("expected xai-oauth to expose only grok-4.3, got %d models", len(models))
 	}
 	if channelModels := GetStaticModelDefinitionsByChannel("xai-oauth"); findModelInfo(channelModels, "grok-4.3") == nil {
 		t.Fatal("expected xai-oauth static channel lookup to include grok-4.3")
@@ -82,12 +72,22 @@ func TestXAIOAuthModelsFallbackToRemoteXAISection(t *testing.T) {
 	withModelsCatalog(t, &staticModelsJSON{
 		XAI: []*ModelInfo{
 			{
-				ID:                  "grok-remote",
+				ID:                  "grok-4.3",
 				Object:              "model",
 				Created:             1773014400,
 				OwnedBy:             "xai",
 				Type:                "xai",
-				Name:                "grok-remote",
+				Name:                "grok-4.3",
+				ContextLength:       1000000,
+				MaxCompletionTokens: 65536,
+			},
+			{
+				ID:                  "grok-unsupported",
+				Object:              "model",
+				Created:             1773014400,
+				OwnedBy:             "xai",
+				Type:                "xai",
+				Name:                "grok-unsupported",
 				ContextLength:       1000000,
 				MaxCompletionTokens: 65536,
 			},
@@ -95,12 +95,15 @@ func TestXAIOAuthModelsFallbackToRemoteXAISection(t *testing.T) {
 	})
 
 	models := GetXAIOAuthModels()
-	model := findModelInfo(models, "grok-remote")
+	model := findModelInfo(models, "grok-4.3")
 	if model == nil {
-		t.Fatal("expected xai-oauth models to fall back to remote xai section")
+		t.Fatal("expected xai-oauth models to use supported remote xai section model")
 	}
 	if model.Type != "xai-oauth" {
 		t.Fatalf("fallback model type = %q, want xai-oauth", model.Type)
+	}
+	if findModelInfo(models, "grok-unsupported") != nil {
+		t.Fatal("expected xai-oauth models to filter unsupported remote xai models")
 	}
 	if got := getModels().XAI[0].Type; got != "xai" {
 		t.Fatalf("fallback mutated source xai model type = %q, want xai", got)
@@ -114,17 +117,17 @@ func TestXAIOAuthModelsFallbackToBuiltinsWhenCatalogMissing(t *testing.T) {
 	if findModelInfo(models, "grok-4.3") == nil {
 		t.Fatal("expected built-in xai-oauth fallback to include grok-4.3")
 	}
-	if findModelInfo(models, "grok-4.20-multi-agent-0309") == nil {
-		t.Fatal("expected built-in xai-oauth fallback to include grok-4.20-multi-agent-0309")
+	if len(models) != 1 {
+		t.Fatalf("expected built-in xai-oauth fallback to expose only grok-4.3, got %d models", len(models))
 	}
 }
 
 func TestDetectChangedProvidersIncludesEffectiveXAIOAuthModels(t *testing.T) {
 	oldData := &staticModelsJSON{
-		XAI: []*ModelInfo{{ID: "grok-old", Object: "model", Type: "xai"}},
+		XAI: []*ModelInfo{{ID: "grok-4.3", Object: "model", Type: "xai", Created: 1}},
 	}
 	newData := &staticModelsJSON{
-		XAI: []*ModelInfo{{ID: "grok-new", Object: "model", Type: "xai"}},
+		XAI: []*ModelInfo{{ID: "grok-4.3", Object: "model", Type: "xai", Created: 2}},
 	}
 
 	changed := detectChangedProviders(oldData, newData)

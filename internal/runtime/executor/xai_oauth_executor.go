@@ -418,7 +418,95 @@ func prepareXAIOAuthResponsesBody(body []byte, baseModel string, stream bool) []
 	body, _ = sjson.DeleteBytes(body, "safety_identifier")
 	body, _ = sjson.DeleteBytes(body, "stream_options")
 	body = normalizeCodexInstructions(body)
+	body = sanitizeXAIOAuthUnsupportedTools(body)
 	return body
+}
+
+func sanitizeXAIOAuthUnsupportedTools(body []byte) []byte {
+	body = filterXAIOAuthToolArray(body, "tools")
+	body = filterXAIOAuthToolChoice(body)
+	body = filterXAIOAuthInputItems(body)
+	return body
+}
+
+func filterXAIOAuthToolArray(body []byte, path string) []byte {
+	tools := gjson.GetBytes(body, path)
+	if !tools.IsArray() {
+		return body
+	}
+
+	filtered := make([]any, 0, len(tools.Array()))
+	tools.ForEach(func(_, tool gjson.Result) bool {
+		if tool.IsObject() && xaiOAuthSupportsToolType(tool.Get("type").String()) {
+			filtered = append(filtered, tool.Value())
+		}
+		return true
+	})
+
+	if len(filtered) == 0 {
+		updated, _ := sjson.DeleteBytes(body, path)
+		return updated
+	}
+	updated, _ := sjson.SetBytes(body, path, filtered)
+	return updated
+}
+
+func filterXAIOAuthToolChoice(body []byte) []byte {
+	toolChoice := gjson.GetBytes(body, "tool_choice")
+	if !toolChoice.Exists() || !toolChoice.IsObject() {
+		return body
+	}
+
+	toolChoiceType := strings.TrimSpace(toolChoice.Get("type").String())
+	if toolChoiceType == "allowed_tools" {
+		body = filterXAIOAuthToolArray(body, "tool_choice.tools")
+		if !gjson.GetBytes(body, "tool_choice.tools").IsArray() {
+			updated, _ := sjson.DeleteBytes(body, "tool_choice")
+			return updated
+		}
+		return body
+	}
+
+	if toolChoiceType != "" && !xaiOAuthSupportsToolType(toolChoiceType) {
+		updated, _ := sjson.DeleteBytes(body, "tool_choice")
+		return updated
+	}
+	return body
+}
+
+func filterXAIOAuthInputItems(body []byte) []byte {
+	input := gjson.GetBytes(body, "input")
+	if !input.IsArray() {
+		return body
+	}
+
+	filtered := make([]any, 0, len(input.Array()))
+	changed := false
+	input.ForEach(func(_, item gjson.Result) bool {
+		switch strings.TrimSpace(item.Get("type").String()) {
+		case "custom_tool_call", "custom_tool_call_output":
+			changed = true
+			return true
+		default:
+			filtered = append(filtered, item.Value())
+			return true
+		}
+	})
+
+	if !changed {
+		return body
+	}
+	updated, _ := sjson.SetBytes(body, "input", filtered)
+	return updated
+}
+
+func xaiOAuthSupportsToolType(toolType string) bool {
+	switch strings.TrimSpace(toolType) {
+	case "function", "web_search", "x_search", "collections_search", "file_search", "code_execution", "code_interpreter", "mcp", "shell":
+		return true
+	default:
+		return false
+	}
 }
 
 func newXAIOAuthRequest(ctx context.Context, url string, rawJSON []byte) (*http.Request, error) {

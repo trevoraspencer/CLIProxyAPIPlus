@@ -94,6 +94,77 @@ func TestXAIOAuthExecutorExecuteSendsBearerResponsesRequest(t *testing.T) {
 	}
 }
 
+func TestPrepareXAIOAuthResponsesBodyFiltersUnsupportedCustomTools(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{
+		"model": "grok-4.3",
+		"stream": false,
+		"tools": [
+			{"type": "function", "name": "Read", "parameters": {"type": "object"}},
+			{"type": "custom", "name": "ApplyPatch", "format": {"type": "grammar", "syntax": "lark", "definition": "start: /a/"}}
+		],
+		"tool_choice": {
+			"type": "allowed_tools",
+			"tools": [
+				{"type": "function", "name": "Read"},
+				{"type": "custom", "name": "ApplyPatch"}
+			]
+		},
+		"input": [
+			{"type": "custom_tool_call", "call_id": "call-custom", "name": "ApplyPatch", "input": "*** Begin Patch"},
+			{"type": "custom_tool_call_output", "call_id": "call-custom", "output": "ok"},
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}
+		]
+	}`)
+
+	out := prepareXAIOAuthResponsesBody(body, "grok-4.3", true)
+
+	if got := gjson.GetBytes(out, "tools.#").Int(); got != 1 {
+		t.Fatalf("tools count = %d, want 1; body=%s", got, string(out))
+	}
+	if got := gjson.GetBytes(out, "tools.0.type").String(); got != "function" {
+		t.Fatalf("tools.0.type = %q, want function; body=%s", got, string(out))
+	}
+	if gjson.GetBytes(out, `tools.#(type=="custom")`).Exists() {
+		t.Fatalf("custom tool should be filtered; body=%s", string(out))
+	}
+	if got := gjson.GetBytes(out, "tool_choice.tools.#").Int(); got != 1 {
+		t.Fatalf("tool_choice.tools count = %d, want 1; body=%s", got, string(out))
+	}
+	if got := gjson.GetBytes(out, "tool_choice.tools.0.type").String(); got != "function" {
+		t.Fatalf("tool_choice.tools.0.type = %q, want function; body=%s", got, string(out))
+	}
+	if got := gjson.GetBytes(out, "input.#").Int(); got != 1 {
+		t.Fatalf("input count = %d, want 1; body=%s", got, string(out))
+	}
+	if got := gjson.GetBytes(out, "input.0.type").String(); got != "message" {
+		t.Fatalf("input.0.type = %q, want message; body=%s", got, string(out))
+	}
+}
+
+func TestPrepareXAIOAuthResponsesBodyDeletesOnlyUnsupportedToolChoice(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{
+		"model": "grok-4.3",
+		"tools": [
+			{"type": "custom", "name": "ApplyPatch", "format": {"type": "grammar", "syntax": "lark", "definition": "start: /a/"}}
+		],
+		"tool_choice": {"type": "custom", "name": "ApplyPatch"},
+		"input": "hello"
+	}`)
+
+	out := prepareXAIOAuthResponsesBody(body, "grok-4.3", false)
+
+	if gjson.GetBytes(out, "tools").Exists() {
+		t.Fatalf("tools should be deleted when all entries are unsupported; body=%s", string(out))
+	}
+	if gjson.GetBytes(out, "tool_choice").Exists() {
+		t.Fatalf("tool_choice should be deleted when it targets an unsupported tool; body=%s", string(out))
+	}
+}
+
 func TestXAIOAuthExecutorExecuteStreamTranslatesSSE(t *testing.T) {
 	t.Parallel()
 
