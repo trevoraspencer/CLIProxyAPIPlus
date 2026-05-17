@@ -118,6 +118,18 @@ func TestComputeCodexModelsHash_IgnoresBlankAndDedup(t *testing.T) {
 	}
 }
 
+func TestComputeZAIModelsHash_IgnoresBlankAndDedup(t *testing.T) {
+	a := []config.ZAIModel{
+		{Name: "glm-5.1", Alias: "glm51"},
+		{Name: " "},
+		{Name: "GLM-5.1", Alias: "GLM51"},
+	}
+	b := []config.ZAIModel{{Name: "glm-5.1", Alias: "glm51"}}
+	if h1, h2 := ComputeZAIModelsHash(a), ComputeZAIModelsHash(b); h1 == "" || h1 != h2 {
+		t.Fatalf("expected same hash ignoring blanks/dupes, got %q / %q", h1, h2)
+	}
+}
+
 func TestComputeExcludedModelsHash_Normalizes(t *testing.T) {
 	hash1 := ComputeExcludedModelsHash([]string{" A ", "b", "a"})
 	hash2 := ComputeExcludedModelsHash([]string{"a", " b", "A"})

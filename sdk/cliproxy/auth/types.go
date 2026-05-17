@@ -525,6 +525,14 @@ func (a *Auth) AccountInfo() (string, string) {
 		}
 	}
 
+	if a.Attributes != nil {
+		if strings.EqualFold(strings.TrimSpace(a.Attributes["auth_kind"]), "apikey") {
+			if v := strings.TrimSpace(a.Attributes["api_key"]); v != "" {
+				return "api_key", v
+			}
+		}
+	}
+
 	// Check metadata for email first (OAuth-style auth)
 	if a.Metadata != nil {
 		if method, ok := a.Metadata["auth_method"].(string); ok {

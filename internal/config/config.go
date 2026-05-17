@@ -147,6 +147,9 @@ type Config struct {
 	// Codex defines a list of Codex API key configurations as specified in the YAML configuration file.
 	CodexKey []CodexKey `yaml:"codex-api-key" json:"codex-api-key"`
 
+	// ZAIKey defines a list of Z.AI API key configurations.
+	ZAIKey []ZAIKey `yaml:"zai-api-key" json:"zai-api-key"`
+
 	// CodexHeaderDefaults configures fallback headers for Codex OAuth model requests.
 	// These are used only when the client does not send its own headers.
 	CodexHeaderDefaults CodexHeaderDefaults `yaml:"codex-header-defaults" json:"codex-header-defaults"`
@@ -177,7 +180,7 @@ type Config struct {
 	// gemini-cli, vertex, aistudio, antigravity, xai-oauth, claude, codex, iflow, kiro, github-copilot, kimi.
 	//
 	// NOTE: This does not apply to existing per-credential model alias features under:
-	// gemini-api-key, codex-api-key, claude-api-key, openai-compatibility, vertex-api-key, and ampcode.
+	// gemini-api-key, codex-api-key, zai-api-key, claude-api-key, openai-compatibility, vertex-api-key, and ampcode.
 	OAuthModelAlias map[string][]OAuthModelAlias `yaml:"oauth-model-alias,omitempty" json:"oauth-model-alias,omitempty"`
 
 	// Payload defines default and override rules for provider payload parameters.
@@ -518,6 +521,31 @@ type CodexModel struct {
 func (m CodexModel) GetName() string  { return m.Name }
 func (m CodexModel) GetAlias() string { return m.Alias }
 
+// ZAIKey represents the configuration for a Z.AI GLM Coding Plan API key.
+type ZAIKey struct {
+	APIKey         string            `yaml:"api-key" json:"api-key"`
+	Priority       int               `yaml:"priority,omitempty" json:"priority,omitempty"`
+	Prefix         string            `yaml:"prefix,omitempty" json:"prefix,omitempty"`
+	BaseURL        string            `yaml:"base-url,omitempty" json:"base-url,omitempty"`
+	ProxyURL       string            `yaml:"proxy-url,omitempty" json:"proxy-url,omitempty"`
+	Models         []ZAIModel        `yaml:"models,omitempty" json:"models,omitempty"`
+	Headers        map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
+	ExcludedModels []string          `yaml:"excluded-models,omitempty" json:"excluded-models,omitempty"`
+	DisableCooling bool              `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
+}
+
+func (k ZAIKey) GetAPIKey() string  { return k.APIKey }
+func (k ZAIKey) GetBaseURL() string { return k.BaseURL }
+
+// ZAIModel describes a mapping between a client-facing alias and upstream GLM model.
+type ZAIModel struct {
+	Name  string `yaml:"name" json:"name"`
+	Alias string `yaml:"alias" json:"alias"`
+}
+
+func (m ZAIModel) GetName() string  { return m.Name }
+func (m ZAIModel) GetAlias() string { return m.Alias }
+
 // GeminiKey represents the configuration for a Gemini API key,
 // including optional overrides for upstream base URL, proxy routing, and headers.
 type GeminiKey struct {
@@ -821,6 +849,9 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	// Sanitize Codex keys: drop entries without base-url
 	cfg.SanitizeCodexKeys()
 
+	// Sanitize Z.AI API key configuration.
+	cfg.SanitizeZAIKeys()
+
 	// Sanitize Codex header defaults.
 	cfg.SanitizeCodexHeaderDefaults()
 
@@ -1055,6 +1086,21 @@ func (cfg *Config) SanitizeCodexKeys() {
 		out = append(out, e)
 	}
 	cfg.CodexKey = out
+}
+
+// SanitizeZAIKeys normalizes Z.AI API key configuration.
+func (cfg *Config) SanitizeZAIKeys() {
+	if cfg == nil || len(cfg.ZAIKey) == 0 {
+		return
+	}
+	for i := range cfg.ZAIKey {
+		entry := &cfg.ZAIKey[i]
+		entry.Prefix = normalizeModelPrefix(entry.Prefix)
+		entry.BaseURL = strings.TrimSpace(entry.BaseURL)
+		entry.ProxyURL = strings.TrimSpace(entry.ProxyURL)
+		entry.Headers = NormalizeHeaders(entry.Headers)
+		entry.ExcludedModels = NormalizeExcludedModels(entry.ExcludedModels)
+	}
 }
 
 // SanitizeClaudeKeys normalizes headers for Claude credentials.

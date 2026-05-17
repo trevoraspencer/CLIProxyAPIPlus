@@ -1113,7 +1113,7 @@ func (r *ModelRegistry) convertModelToMap(model *ModelInfo, handlerType string) 
 	}
 
 	switch handlerType {
-	case "openai":
+	case "openai", "zai":
 		result := map[string]any{
 			"id":       model.ID,
 			"object":   "model",

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/auth/zai"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 )
@@ -163,6 +164,66 @@ func TestFileSynthesizer_Synthesize_GeminiProviderMapping(t *testing.T) {
 
 	if auths[0].Provider != "gemini-cli" {
 		t.Errorf("gemini should be mapped to gemini-cli, got %s", auths[0].Provider)
+	}
+}
+
+func TestFileSynthesizer_Synthesize_ZAIAPIKeyFile(t *testing.T) {
+	tempDir := t.TempDir()
+	data := []byte(`{"type":"zai","api_key":"zai-key","base_url":"https://custom.z.ai/v4","headers":{"X-Test":"yes"},"excluded-models":["glm-4.5-air"]}`)
+	if err := os.WriteFile(filepath.Join(tempDir, "zai-auth.json"), data, 0644); err != nil {
+		t.Fatalf("failed to write auth file: %v", err)
+	}
+
+	synth := NewFileSynthesizer()
+	ctx := &SynthesisContext{
+		Config:      &config.Config{},
+		AuthDir:     tempDir,
+		Now:         time.Now(),
+		IDGenerator: NewStableIDGenerator(),
+	}
+
+	auths, err := synth.Synthesize(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(auths) != 1 {
+		t.Fatalf("expected 1 auth, got %d", len(auths))
+	}
+	auth := auths[0]
+	if auth.Provider != zai.Provider {
+		t.Fatalf("provider = %q", auth.Provider)
+	}
+	if auth.Label != "zai-apikey" {
+		t.Fatalf("label = %q", auth.Label)
+	}
+	if got := auth.Attributes["api_key"]; got != "zai-key" {
+		t.Fatalf("api_key = %q", got)
+	}
+	if got := auth.Attributes["base_url"]; got != "https://custom.z.ai/v4" {
+		t.Fatalf("base_url = %q", got)
+	}
+	if got := auth.Attributes["auth_kind"]; got != "apikey" {
+		t.Fatalf("auth_kind = %q", got)
+	}
+	if got := auth.Attributes["header:X-Test"]; got != "yes" {
+		t.Fatalf("header:X-Test = %q", got)
+	}
+	if got := auth.Attributes["excluded_models"]; got != "glm-4.5-air" {
+		t.Fatalf("excluded_models = %q", got)
+	}
+}
+
+func TestFileSynthesizer_Synthesize_ZAIAPIKeyFileDefaultBaseURL(t *testing.T) {
+	auths := SynthesizeAuthFile(&SynthesisContext{
+		Config:  &config.Config{},
+		AuthDir: t.TempDir(),
+		Now:     time.Now(),
+	}, filepath.Join(t.TempDir(), "zai-auth.json"), []byte(`{"type":"zai","api_key":"zai-key"}`))
+	if len(auths) != 1 {
+		t.Fatalf("expected 1 auth, got %d", len(auths))
+	}
+	if got := auths[0].Attributes["base_url"]; got != zai.DefaultCodingBaseURL {
+		t.Fatalf("base_url = %q, want %q", got, zai.DefaultCodingBaseURL)
 	}
 }
 

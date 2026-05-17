@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/auth/zai"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 )
@@ -314,6 +315,73 @@ func TestConfigSynthesizer_CodexKeys_SkipsEmptyAndHeaders(t *testing.T) {
 	}
 }
 
+func TestConfigSynthesizer_ZAIKeys(t *testing.T) {
+	synth := NewConfigSynthesizer()
+	ctx := &SynthesisContext{
+		Config: &config.Config{
+			ZAIKey: []config.ZAIKey{
+				{
+					APIKey:         "zai-key-123",
+					Prefix:         "glm",
+					ProxyURL:       "http://proxy.local",
+					Priority:       7,
+					Headers:        map[string]string{"X-ZAI": "yes"},
+					ExcludedModels: []string{"glm-4.5-air"},
+					Models:         []config.ZAIModel{{Name: "glm-5.1", Alias: "glm51"}},
+					DisableCooling: true,
+				},
+			},
+		},
+		Now:         time.Now(),
+		IDGenerator: NewStableIDGenerator(),
+	}
+
+	auths, err := synth.Synthesize(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(auths) != 1 {
+		t.Fatalf("expected 1 auth, got %d", len(auths))
+	}
+	auth := auths[0]
+	if auth.Provider != "zai" {
+		t.Fatalf("expected provider zai, got %s", auth.Provider)
+	}
+	if auth.Label != "zai-apikey" {
+		t.Fatalf("expected label zai-apikey, got %s", auth.Label)
+	}
+	if auth.Prefix != "glm" {
+		t.Fatalf("expected prefix glm, got %s", auth.Prefix)
+	}
+	if auth.ProxyURL != "http://proxy.local" {
+		t.Fatalf("expected proxy http://proxy.local, got %s", auth.ProxyURL)
+	}
+	if got := auth.Attributes["api_key"]; got != "zai-key-123" {
+		t.Fatalf("api_key = %q", got)
+	}
+	if got := auth.Attributes["base_url"]; got != zai.DefaultCodingBaseURL {
+		t.Fatalf("base_url = %q, want %q", got, zai.DefaultCodingBaseURL)
+	}
+	if got := auth.Attributes["priority"]; got != "7" {
+		t.Fatalf("priority = %q", got)
+	}
+	if got := auth.Attributes["auth_kind"]; got != "apikey" {
+		t.Fatalf("auth_kind = %q", got)
+	}
+	if got := auth.Attributes["header:X-ZAI"]; got != "yes" {
+		t.Fatalf("header:X-ZAI = %q", got)
+	}
+	if _, ok := auth.Attributes["models_hash"]; !ok {
+		t.Fatal("expected models_hash")
+	}
+	if got := auth.Attributes["excluded_models"]; got != "glm-4.5-air" {
+		t.Fatalf("excluded_models = %q", got)
+	}
+	if v, ok := auth.Metadata["disable_cooling"].(bool); !ok || !v {
+		t.Fatalf("expected disable_cooling=true, got %v", auth.Metadata["disable_cooling"])
+	}
+}
+
 func TestConfigSynthesizer_OpenAICompat(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -615,6 +683,9 @@ func TestConfigSynthesizer_AllProviders(t *testing.T) {
 			CodexKey: []config.CodexKey{
 				{APIKey: "codex-key"},
 			},
+			ZAIKey: []config.ZAIKey{
+				{APIKey: "zai-key"},
+			},
 			OpenAICompatibility: []config.OpenAICompatibility{
 				{Name: "compat", BaseURL: "https://compat.api"},
 			},
@@ -630,8 +701,8 @@ func TestConfigSynthesizer_AllProviders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(auths) != 5 {
-		t.Fatalf("expected 5 auths, got %d", len(auths))
+	if len(auths) != 6 {
+		t.Fatalf("expected 6 auths, got %d", len(auths))
 	}
 
 	providers := make(map[string]bool)
@@ -639,7 +710,7 @@ func TestConfigSynthesizer_AllProviders(t *testing.T) {
 		providers[a.Provider] = true
 	}
 
-	expected := []string{"gemini", "claude", "codex", "compat", "vertex"}
+	expected := []string{"gemini", "claude", "codex", "zai", "compat", "vertex"}
 	for _, p := range expected {
 		if !providers[p] {
 			t.Errorf("expected provider %s not found", p)

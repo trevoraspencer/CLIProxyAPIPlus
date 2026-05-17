@@ -21,6 +21,7 @@ type staticModelsJSON struct {
 	CodexPro    []*ModelInfo `json:"codex-pro"`
 	Kimi        []*ModelInfo `json:"kimi"`
 	Antigravity []*ModelInfo `json:"antigravity"`
+	ZAI         []*ModelInfo `json:"zai"`
 	XAI         []*ModelInfo `json:"xai"`
 	XAIOAuth    []*ModelInfo `json:"xai-oauth"`
 }
@@ -78,6 +79,80 @@ func GetKimiModels() []*ModelInfo {
 // GetAntigravityModels returns the standard Antigravity model definitions.
 func GetAntigravityModels() []*ModelInfo {
 	return cloneModelInfos(getModels().Antigravity)
+}
+
+// GetZAIModels returns Z.AI GLM Coding Plan model definitions.
+func GetZAIModels() []*ModelInfo {
+	data := getModels()
+	if data != nil && len(data.ZAI) > 0 {
+		return normalizeZAIModels(data.ZAI)
+	}
+	return zaiBuiltinModels()
+}
+
+func normalizeZAIModels(models []*ModelInfo) []*ModelInfo {
+	out := cloneModelInfos(models)
+	for _, model := range out {
+		if model == nil {
+			continue
+		}
+		model.Type = "zai"
+		if strings.TrimSpace(model.OwnedBy) == "" {
+			model.OwnedBy = "zai"
+		}
+		if strings.TrimSpace(model.Object) == "" {
+			model.Object = "model"
+		}
+		if strings.TrimSpace(model.Name) == "" {
+			model.Name = model.ID
+		}
+		if model.Thinking == nil {
+			model.Thinking = zaiThinkingSupport()
+		}
+	}
+	return out
+}
+
+func zaiBuiltinModels() []*ModelInfo {
+	now := int64(1704067200)
+	modelIDs := []struct {
+		id      string
+		display string
+	}{
+		{"glm-5.1", "GLM-5.1"},
+		{"glm-5", "GLM-5"},
+		{"glm-5-turbo", "GLM-5-Turbo"},
+		{"glm-4.7", "GLM-4.7"},
+		{"glm-4.6", "GLM-4.6"},
+		{"glm-4.5", "GLM-4.5"},
+		{"glm-4.5-air", "GLM-4.5-Air"},
+	}
+	models := make([]*ModelInfo, 0, len(modelIDs))
+	for _, entry := range modelIDs {
+		models = append(models, &ModelInfo{
+			ID:                  entry.id,
+			Object:              "model",
+			Created:             now,
+			OwnedBy:             "zai",
+			Type:                "zai",
+			DisplayName:         entry.display,
+			Name:                entry.id,
+			Description:         entry.display + " via Z.AI GLM Coding Plan",
+			ContextLength:       128000,
+			MaxCompletionTokens: 32768,
+			SupportedEndpoints:  []string{"/chat/completions"},
+			Thinking:            zaiThinkingSupport(),
+		})
+	}
+	return models
+}
+
+func zaiThinkingSupport() *ThinkingSupport {
+	return &ThinkingSupport{
+		Levels:         []string{"none", "low", "medium", "high"},
+		ZeroAllowed:    true,
+		DynamicAllowed: true,
+	}
 }
 
 // GetXAIOAuthModels returns the standard xAI OAuth model definitions.
@@ -239,6 +314,7 @@ func cloneModelInfos(models []*ModelInfo) []*ModelInfo {
 //   - aistudio
 //   - codex
 //   - kimi
+//   - zai
 //   - kilo
 //   - github-copilot
 //   - amazonq
@@ -271,6 +347,8 @@ func GetStaticModelDefinitionsByChannel(channel string) []*ModelInfo {
 		return GetAmazonQModels()
 	case "antigravity":
 		return GetAntigravityModels()
+	case "zai":
+		return GetZAIModels()
 	case "xai-oauth":
 		return GetXAIOAuthModels()
 	case "codebuddy":
@@ -311,6 +389,7 @@ func LookupStaticModelInfo(modelID string) *ModelInfo {
 		data.CodexPro,
 		data.Kimi,
 		data.Antigravity,
+		GetZAIModels(),
 		effectiveXAIOAuthModels(data),
 		GetGitHubCopilotModels(),
 		GetKiroModels(),

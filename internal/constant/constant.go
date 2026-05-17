@@ -13,6 +13,9 @@ const (
 	// Codex represents the OpenAI Codex provider identifier.
 	Codex = "codex"
 
+	// ZAI represents the Z.AI GLM Coding Plan provider identifier.
+	ZAI = "zai"
+
 	// Claude represents the Anthropic Claude provider identifier.
 	Claude = "claude"
 

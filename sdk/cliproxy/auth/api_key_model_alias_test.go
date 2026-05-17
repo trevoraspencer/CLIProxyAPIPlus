@@ -108,6 +108,7 @@ func TestAPIKeyModelAlias_MultipleProviders(t *testing.T) {
 		GeminiKey: []internalconfig.GeminiKey{{APIKey: "gemini-key", Models: []internalconfig.GeminiModel{{Name: "gemini-2.5-pro", Alias: "gp"}}}},
 		ClaudeKey: []internalconfig.ClaudeKey{{APIKey: "claude-key", Models: []internalconfig.ClaudeModel{{Name: "claude-sonnet-4", Alias: "cs4"}}}},
 		CodexKey:  []internalconfig.CodexKey{{APIKey: "codex-key", Models: []internalconfig.CodexModel{{Name: "o3", Alias: "o"}}}},
+		ZAIKey:    []internalconfig.ZAIKey{{APIKey: "zai-key", Models: []internalconfig.ZAIModel{{Name: "glm-5.1", Alias: "glm51"}}}},
 	}
 
 	mgr := NewManager(nil, nil, nil)
@@ -117,6 +118,7 @@ func TestAPIKeyModelAlias_MultipleProviders(t *testing.T) {
 	_, _ = mgr.Register(ctx, &Auth{ID: "gemini-auth", Provider: "gemini", Attributes: map[string]string{"api_key": "gemini-key"}})
 	_, _ = mgr.Register(ctx, &Auth{ID: "claude-auth", Provider: "claude", Attributes: map[string]string{"api_key": "claude-key"}})
 	_, _ = mgr.Register(ctx, &Auth{ID: "codex-auth", Provider: "codex", Attributes: map[string]string{"api_key": "codex-key"}})
+	_, _ = mgr.Register(ctx, &Auth{ID: "zai-auth", Provider: "zai", Attributes: map[string]string{"api_key": "zai-key"}})
 
 	tests := []struct {
 		authID, input, want string
@@ -124,6 +126,7 @@ func TestAPIKeyModelAlias_MultipleProviders(t *testing.T) {
 		{"gemini-auth", "gp", "gemini-2.5-pro"},
 		{"claude-auth", "cs4", "claude-sonnet-4"},
 		{"codex-auth", "o", "o3"},
+		{"zai-auth", "glm51", "glm-5.1"},
 	}
 
 	for _, tt := range tests {

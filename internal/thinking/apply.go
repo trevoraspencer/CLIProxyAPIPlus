@@ -18,6 +18,7 @@ var providerAppliers = map[string]ProviderApplier{
 	"codex":       nil,
 	"antigravity": nil,
 	"kimi":        nil,
+	"zai":         nil,
 }
 
 // GetProviderApplier returns the ProviderApplier for the given provider name.
@@ -329,6 +330,8 @@ func extractThinkingConfig(body []byte, provider string) ThinkingConfig {
 	case "kimi":
 		// Kimi uses OpenAI-compatible reasoning_effort format
 		return extractOpenAIConfig(body)
+	case "zai":
+		return extractZAIConfig(body)
 	default:
 		return ThinkingConfig{}
 	}
@@ -467,6 +470,19 @@ func extractOpenAIConfig(body []byte) ThinkingConfig {
 	}
 
 	return ThinkingConfig{}
+}
+
+// extractZAIConfig extracts thinking configuration from Z.AI OpenAI-compatible payloads.
+func extractZAIConfig(body []byte) ThinkingConfig {
+	if thinkingType := gjson.GetBytes(body, "thinking.type"); thinkingType.Exists() {
+		switch strings.ToLower(strings.TrimSpace(thinkingType.String())) {
+		case "disabled":
+			return ThinkingConfig{Mode: ModeNone, Budget: 0}
+		case "enabled":
+			return ThinkingConfig{Mode: ModeAuto, Budget: -1}
+		}
+	}
+	return extractOpenAIConfig(body)
 }
 
 // extractCodexConfig extracts thinking configuration from Codex format request body.

@@ -215,6 +215,7 @@ func detectChangedProviders(oldData, newData *staticModelsJSON) []string {
 		{"codex", oldData.CodexPro, newData.CodexPro},
 		{"kimi", oldData.Kimi, newData.Kimi},
 		{"antigravity", oldData.Antigravity, newData.Antigravity},
+		{"zai", oldData.ZAI, newData.ZAI},
 		{"xai-oauth", effectiveXAIOAuthModels(oldData), effectiveXAIOAuthModels(newData)},
 	}
 
@@ -347,6 +348,7 @@ func validateModelsCatalog(data *staticModelsJSON) error {
 		name   string
 		models []*ModelInfo
 	}{
+		{name: "zai", models: data.ZAI},
 		{name: "xai", models: data.XAI},
 		{name: "xai-oauth", models: data.XAIOAuth},
 	}

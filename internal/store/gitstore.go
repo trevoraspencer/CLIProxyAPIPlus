@@ -496,6 +496,7 @@ func (s *GitTokenStore) readAuthFile(path, baseDir string) (*cliproxyauth.Auth, 
 	if email, ok := metadata["email"].(string); ok && email != "" {
 		auth.Attributes["email"] = email
 	}
+	applyZAIFileAPIKeyAttributes(auth, metadata)
 	cliproxyauth.ApplyCustomHeadersFromMetadata(auth)
 	if disabled, ok := metadata["disabled"].(bool); ok && disabled {
 		auth.Disabled = true

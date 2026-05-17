@@ -24,6 +24,11 @@ type CodexModelsSummary struct {
 	count int
 }
 
+type ZAIModelsSummary struct {
+	hash  string
+	count int
+}
+
 type VertexModelsSummary struct {
 	hash  string
 	count int
@@ -87,6 +92,27 @@ func SummarizeCodexModels(models []config.CodexModel) CodexModelsSummary {
 		}
 	})
 	return CodexModelsSummary{
+		hash:  hashJoined(keys),
+		count: len(keys),
+	}
+}
+
+// SummarizeZAIModels hashes Z.AI model aliases for change detection.
+func SummarizeZAIModels(models []config.ZAIModel) ZAIModelsSummary {
+	if len(models) == 0 {
+		return ZAIModelsSummary{}
+	}
+	keys := normalizeModelPairs(func(out func(key string)) {
+		for _, model := range models {
+			name := strings.TrimSpace(model.Name)
+			alias := strings.TrimSpace(model.Alias)
+			if name == "" && alias == "" {
+				continue
+			}
+			out(strings.ToLower(name) + "|" + strings.ToLower(alias))
+		}
+	})
+	return ZAIModelsSummary{
 		hash:  hashJoined(keys),
 		count: len(keys),
 	}

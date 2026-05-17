@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/auth/codex"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/auth/zai"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/geminicli"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 )
@@ -157,8 +158,39 @@ func synthesizeFileAuths(ctx *SynthesisContext, fullPath string, data []byte) []
 			}
 		}
 	}
+	authKind := "oauth"
+	if provider == zai.Provider {
+		authKind = "apikey"
+		a.Label = "zai-apikey"
+		a.Attributes["auth_kind"] = "apikey"
+		if rawKey, ok := metadata["api_key"].(string); ok {
+			if key := strings.TrimSpace(rawKey); key != "" {
+				a.Attributes["api_key"] = key
+			}
+		} else if rawKey, ok := metadata["api-key"].(string); ok {
+			if key := strings.TrimSpace(rawKey); key != "" {
+				a.Attributes["api_key"] = key
+			}
+		}
+		baseURL := ""
+		if rawBase, ok := metadata["base_url"].(string); ok {
+			baseURL = strings.TrimSpace(rawBase)
+		}
+		if baseURL == "" {
+			if rawBase, ok := metadata["base-url"].(string); ok {
+				baseURL = strings.TrimSpace(rawBase)
+			}
+		}
+		if baseURL == "" {
+			baseURL = zai.DefaultCodingBaseURL
+		}
+		a.Attributes["base_url"] = baseURL
+		if _, exists := metadata["auth_method"]; !exists {
+			metadata["auth_method"] = "api_key"
+		}
+	}
 	coreauth.ApplyCustomHeadersFromMetadata(a)
-	ApplyAuthExcludedModelsMeta(a, cfg, perAccountExcluded, "oauth")
+	ApplyAuthExcludedModelsMeta(a, cfg, perAccountExcluded, authKind)
 	// For codex auth files, extract plan_type from the JWT id_token.
 	if provider == "codex" {
 		if idTokenRaw, ok := metadata["id_token"].(string); ok && strings.TrimSpace(idTokenRaw) != "" {

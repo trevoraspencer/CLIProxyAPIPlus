@@ -68,6 +68,26 @@ func TestXAIOAuthStaticModels(t *testing.T) {
 	}
 }
 
+func TestZAIStaticModels(t *testing.T) {
+	models := GetZAIModels()
+	model := findModelInfo(models, "glm-5.1")
+	if model == nil {
+		t.Fatal("expected zai models to include glm-5.1")
+	}
+	if model.Type != "zai" || model.OwnedBy != "zai" {
+		t.Fatalf("glm-5.1 metadata = %+v", model)
+	}
+	if model.Thinking == nil {
+		t.Fatal("expected glm-5.1 to advertise thinking support")
+	}
+	if channelModels := GetStaticModelDefinitionsByChannel("zai"); findModelInfo(channelModels, "glm-5") == nil {
+		t.Fatal("expected zai static channel lookup to include glm-5")
+	}
+	if lookup := LookupStaticModelInfo("glm-5.1"); lookup == nil || lookup.Type != "zai" {
+		t.Fatalf("LookupStaticModelInfo(glm-5.1) = %+v", lookup)
+	}
+}
+
 func TestXAIOAuthModelsFallbackToRemoteXAISection(t *testing.T) {
 	withModelsCatalog(t, &staticModelsJSON{
 		XAI: []*ModelInfo{
