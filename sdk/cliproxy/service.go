@@ -129,6 +129,7 @@ func newDefaultAuthManager() *sdkAuth.Manager {
 		sdkAuth.NewGeminiAuthenticator(),
 		sdkAuth.NewCodexAuthenticator(),
 		sdkAuth.NewClaudeAuthenticator(),
+		sdkAuth.NewXAIOAuthAuthenticator(),
 		sdkAuth.NewGitLabAuthenticator(),
 	)
 }
@@ -460,6 +461,8 @@ func (s *Service) ensureExecutorsForAuthWithMode(a *coreauth.Auth, forceReplace 
 		return
 	case "antigravity":
 		s.coreManager.RegisterExecutor(executor.NewAntigravityExecutor(s.cfg))
+	case "xai-oauth":
+		s.coreManager.RegisterExecutor(executor.NewXAIOAuthExecutor(s.cfg))
 	case "claude":
 		s.coreManager.RegisterExecutor(executor.NewClaudeExecutor(s.cfg))
 	case "kimi":
@@ -628,6 +631,7 @@ func (s *Service) registerHomeExecutors() {
 	s.coreManager.RegisterExecutor(executor.NewGeminiCLIExecutor(s.cfg))
 	s.coreManager.RegisterExecutor(executor.NewAIStudioExecutor(s.cfg, "", s.wsGateway))
 	s.coreManager.RegisterExecutor(executor.NewAntigravityExecutor(s.cfg))
+	s.coreManager.RegisterExecutor(executor.NewXAIOAuthExecutor(s.cfg))
 	s.coreManager.RegisterExecutor(executor.NewKimiExecutor(s.cfg))
 	s.coreManager.RegisterExecutor(executor.NewOpenAICompatExecutor("openai-compatibility", s.cfg))
 }
@@ -1157,6 +1161,9 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 		models = applyExcludedModels(models, excluded)
 	case "antigravity":
 		models = registry.GetAntigravityModels()
+		models = applyExcludedModels(models, excluded)
+	case "xai-oauth":
+		models = registry.GetXAIOAuthModels()
 		models = applyExcludedModels(models, excluded)
 	case "claude":
 		models = registry.GetClaudeModels()

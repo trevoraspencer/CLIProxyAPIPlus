@@ -87,6 +87,7 @@ func main() {
 	var noBrowser bool
 	var oauthCallbackPort int
 	var antigravityLogin bool
+	var xaiOAuthLogin bool
 	var kimiLogin bool
 	var cursorLogin bool
 	var kiroLogin bool
@@ -128,6 +129,7 @@ func main() {
 	flag.BoolVar(&useIncognito, "incognito", false, "Open browser in incognito/private mode for OAuth (useful for multiple accounts)")
 	flag.BoolVar(&noIncognito, "no-incognito", false, "Force disable incognito mode (uses existing browser session)")
 	flag.BoolVar(&antigravityLogin, "antigravity-login", false, "Login to Antigravity using OAuth")
+	flag.BoolVar(&xaiOAuthLogin, "xai-oauth-login", false, "Login to xAI using OAuth")
 	flag.BoolVar(&kimiLogin, "kimi-login", false, "Login to Kimi using OAuth")
 	flag.BoolVar(&cursorLogin, "cursor-login", false, "Login to Cursor using OAuth")
 	flag.BoolVar(&kiroLogin, "kiro-login", false, "Login to Kiro using Google OAuth")
@@ -597,6 +599,9 @@ func main() {
 	} else if antigravityLogin {
 		// Handle Antigravity login
 		cmd.DoAntigravityLogin(cfg, options)
+	} else if xaiOAuthLogin {
+		// Handle xAI OAuth login
+		cmd.DoXAIOAuthLogin(cfg, options)
 	} else if githubCopilotLogin {
 		// Handle GitHub Copilot login
 		cmd.DoGitHubCopilotLogin(cfg, options)
