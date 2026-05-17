@@ -86,15 +86,19 @@ func GetXAIOAuthModels() []*ModelInfo {
 }
 
 func effectiveXAIOAuthModels(data *staticModelsJSON) []*ModelInfo {
+	var models []*ModelInfo
 	if data != nil {
 		if len(data.XAIOAuth) > 0 {
-			return normalizeXAIOAuthModels(data.XAIOAuth)
-		}
-		if len(data.XAI) > 0 {
-			return normalizeXAIOAuthModels(data.XAI)
+			models = data.XAIOAuth
+		} else if len(data.XAI) > 0 {
+			models = data.XAI
 		}
 	}
-	return normalizeXAIOAuthModels(xaiOAuthBuiltinModels())
+	filtered := filterXAIOAuthSupportedModels(normalizeXAIOAuthModels(models))
+	if len(filtered) > 0 {
+		return filtered
+	}
+	return filterXAIOAuthSupportedModels(normalizeXAIOAuthModels(xaiOAuthBuiltinModels()))
 }
 
 func normalizeXAIOAuthModels(models []*ModelInfo) []*ModelInfo {
@@ -131,46 +135,20 @@ func xaiOAuthBuiltinModels() []*ModelInfo {
 			ContextLength:       256000,
 			MaxCompletionTokens: 64000,
 		},
-		{
-			ID:                  "grok-4.20-0309-reasoning",
-			Object:              "model",
-			Created:             1773014400,
-			OwnedBy:             "xai",
-			Type:                "xai-oauth",
-			DisplayName:         "Grok 4.20 0309 Reasoning",
-			Name:                "grok-4.20-0309-reasoning",
-			Description:         "Grok 4.20 0309 reasoning model via xAI OAuth Responses API",
-			ContextLength:       256000,
-			MaxCompletionTokens: 64000,
-		},
-		{
-			ID:                  "grok-4.20-0309-non-reasoning",
-			Object:              "model",
-			Created:             1773014400,
-			OwnedBy:             "xai",
-			Type:                "xai-oauth",
-			DisplayName:         "Grok 4.20 0309 Non Reasoning",
-			Name:                "grok-4.20-0309-non-reasoning",
-			Description:         "Grok 4.20 0309 non-reasoning model via xAI OAuth Responses API",
-			ContextLength:       256000,
-			MaxCompletionTokens: 64000,
-		},
-		{
-			ID:                  "grok-4.20-multi-agent-0309",
-			Object:              "model",
-			Created:             1773014400,
-			OwnedBy:             "xai",
-			Type:                "xai-oauth",
-			DisplayName:         "Grok 4.20 Multi-Agent 0309",
-			Name:                "grok-4.20-multi-agent-0309",
-			Description:         "Grok 4.20 multi-agent model via xAI OAuth Responses API",
-			ContextLength:       256000,
-			MaxCompletionTokens: 64000,
-			Thinking: &ThinkingSupport{
-				Levels: []string{"low", "medium", "high"},
-			},
-		},
 	}
+}
+
+func filterXAIOAuthSupportedModels(models []*ModelInfo) []*ModelInfo {
+	out := make([]*ModelInfo, 0, len(models))
+	seen := false
+	for _, model := range models {
+		if model == nil || strings.TrimSpace(model.ID) != "grok-4.3" || seen {
+			continue
+		}
+		out = append(out, model)
+		seen = true
+	}
+	return out
 }
 
 // WithCodexBuiltins injects hard-coded Codex-only model definitions that should
