@@ -453,7 +453,25 @@ func filterXAIOAuthToolArray(body []byte, path string) []byte {
 
 func filterXAIOAuthToolChoice(body []byte) []byte {
 	toolChoice := gjson.GetBytes(body, "tool_choice")
-	if !toolChoice.Exists() || !toolChoice.IsObject() {
+	if !toolChoice.Exists() {
+		return body
+	}
+	if toolChoice.Type == gjson.String {
+		switch strings.TrimSpace(toolChoice.String()) {
+		case "auto", "none":
+			return body
+		case "required":
+			if !gjson.GetBytes(body, "tools").IsArray() {
+				updated, _ := sjson.DeleteBytes(body, "tool_choice")
+				return updated
+			}
+			return body
+		default:
+			updated, _ := sjson.DeleteBytes(body, "tool_choice")
+			return updated
+		}
+	}
+	if !toolChoice.IsObject() {
 		return body
 	}
 

@@ -165,6 +165,28 @@ func TestPrepareXAIOAuthResponsesBodyDeletesOnlyUnsupportedToolChoice(t *testing
 	}
 }
 
+func TestPrepareXAIOAuthResponsesBodyDeletesRequiredToolChoiceWithoutTools(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{
+		"model": "grok-4.3",
+		"tools": [
+			{"type": "custom", "name": "ApplyPatch", "format": {"type": "grammar", "syntax": "lark", "definition": "start: /a/"}}
+		],
+		"tool_choice": "required",
+		"input": "hello"
+	}`)
+
+	out := prepareXAIOAuthResponsesBody(body, "grok-4.3", false)
+
+	if gjson.GetBytes(out, "tools").Exists() {
+		t.Fatalf("tools should be deleted when all entries are unsupported; body=%s", string(out))
+	}
+	if gjson.GetBytes(out, "tool_choice").Exists() {
+		t.Fatalf("required tool_choice should be deleted when no supported tools remain; body=%s", string(out))
+	}
+}
+
 func TestXAIOAuthExecutorExecuteStreamTranslatesSSE(t *testing.T) {
 	t.Parallel()
 

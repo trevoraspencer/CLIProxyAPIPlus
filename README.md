@@ -172,11 +172,11 @@ Z.AI file-backed auth entries use provider type `zai` and support `api_key` or `
   "type": "zai",
   "api_key": "<ZAI_API_KEY>",
   "base_url": "https://api.z.ai/api/coding/paas/v4",
-  "metadata": {
-    "prefix": "zai",
-    "header:X-Custom-Header": "example-value",
-    "disable-cooling": "false"
-  }
+  "prefix": "zai",
+  "headers": {
+    "X-Custom-Header": "example-value"
+  },
+  "disable-cooling": "false"
 }
 ```
 
