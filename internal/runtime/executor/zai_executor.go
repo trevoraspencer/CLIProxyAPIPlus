@@ -40,9 +40,10 @@ func (e *ZAIExecutor) PrepareRequest(req *http.Request, auth *cliproxyauth.Auth)
 		return nil
 	}
 	_, apiKey := e.resolveCredentials(auth)
-	if strings.TrimSpace(apiKey) != "" {
-		req.Header.Set("Authorization", "Bearer "+apiKey)
+	if strings.TrimSpace(apiKey) == "" {
+		return statusErr{code: http.StatusUnauthorized, msg: "missing zai api key"}
 	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	var attrs map[string]string
 	if auth != nil {
 		attrs = auth.Attributes
@@ -58,6 +59,9 @@ func (e *ZAIExecutor) HttpRequest(ctx context.Context, auth *cliproxyauth.Auth, 
 	}
 	if ctx == nil {
 		ctx = req.Context()
+	}
+	if _, apiKey := e.resolveCredentials(auth); apiKey == "" {
+		return nil, statusErr{code: http.StatusUnauthorized, msg: "missing zai api key"}
 	}
 	httpReq := req.WithContext(ctx)
 	if err := e.PrepareRequest(httpReq, auth); err != nil {
@@ -76,6 +80,10 @@ func (e *ZAIExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, req 
 	baseURL, apiKey := e.resolveCredentials(auth)
 	if baseURL == "" {
 		err = statusErr{code: http.StatusUnauthorized, msg: "missing zai baseURL"}
+		return resp, err
+	}
+	if apiKey == "" {
+		err = statusErr{code: http.StatusUnauthorized, msg: "missing zai api key"}
 		return resp, err
 	}
 
@@ -172,6 +180,10 @@ func (e *ZAIExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Auth
 	baseURL, apiKey := e.resolveCredentials(auth)
 	if baseURL == "" {
 		err = statusErr{code: http.StatusUnauthorized, msg: "missing zai baseURL"}
+		return nil, err
+	}
+	if apiKey == "" {
+		err = statusErr{code: http.StatusUnauthorized, msg: "missing zai api key"}
 		return nil, err
 	}
 

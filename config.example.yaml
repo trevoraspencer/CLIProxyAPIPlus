@@ -197,6 +197,24 @@ nonstream-keepalive-interval: 0
 #       - "*-mini"          # wildcard matching suffix (e.g. gpt-5-codex-mini)
 #       - "*codex*"         # wildcard matching substring (e.g. gpt-5-codex-low)
 
+
+
+# Z.AI GLM Coding Plan API keys
+# zai-api-key:
+#   - api-key: "your-zai-api-key-here" # placeholder only; obtain from Z.AI Coding Plan
+#     prefix: "test" # optional: require calls like "test/glm-5" to target this credential
+#     disable-cooling: false # optional: per-auth override for auth/model cooldown scheduling
+#     # base-url: "https://api.z.ai/api/coding/paas/v4" # defaults to Coding Plan endpoint when omitted
+#     headers:
+#       X-Custom-Header: "custom-value"
+#     proxy-url: "socks5://proxy.example.com:1080" # optional: per-key proxy override
+#     # proxy-url: "direct" # optional: explicit direct connect for this credential
+#     models:
+#       - name: "glm-5.1" # upstream model name
+#         alias: "glm-5"  # client alias mapped to the upstream model
+#     excluded-models:
+#       - "glm-5-turbo" # exclude specific models (exact match)
+
 # Claude API keys
 # claude-api-key:
 #   - api-key: "sk-atSM..." # use the official claude API key, no need to set the base url
@@ -346,6 +364,26 @@ nonstream-keepalive-interval: 0
 #         alias: "claude-opus-4.66"
 #       - name: "kimi-k2.5"
 #         alias: "claude-opus-4.66"
+#
+#   - name: "opencode-zen" # OpenCode Zen via OpenAI-compatible chat completions only.
+#     disabled: false
+#     prefix: "zen" # optional: require calls like "zen/zen-default" to avoid OpenCode Go alias collisions
+#     base-url: "https://opencode.ai/zen/v1"
+#     api-key-entries:
+#       - api-key: "<OPENCODE_API_KEY>" # placeholder only; do not commit real OpenCode API keys
+#     models:
+#       - name: "zen" # upstream OpenCode Zen model name
+#         alias: "zen-default" # Zen-specific client-visible alias
+#
+#   - name: "opencode-go" # OpenCode Go via OpenAI-compatible chat completions only.
+#     disabled: false
+#     prefix: "go" # optional: require calls like "go/go-default" to avoid OpenCode Zen alias collisions
+#     base-url: "https://opencode.ai/zen/go/v1"
+#     api-key-entries:
+#       - api-key: "<OPENCODE_API_KEY>" # placeholder only; do not commit real OpenCode API keys
+#     models:
+#       - name: "go" # upstream OpenCode Go model name
+#         alias: "go-default" # Go-specific client-visible alias
 
 # Vertex API keys (Vertex-compatible endpoints, base-url is optional)
 # vertex-api-key:

@@ -3,6 +3,7 @@ package cliproxy
 import (
 	"testing"
 
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
 )
@@ -60,5 +61,30 @@ func TestEnsureExecutorsForAuthWithMode_CodexForceReplace(t *testing.T) {
 
 	if firstExecutor == secondExecutor {
 		t.Fatal("expected codex executor replacement in force mode")
+	}
+}
+
+func TestEnsureExecutorsForAuth_ZAIRegistersFirstClassExecutor(t *testing.T) {
+	service := &Service{
+		cfg:         &config.Config{},
+		coreManager: coreauth.NewManager(nil, nil, nil),
+	}
+	auth := &coreauth.Auth{
+		ID:       "zai-auth",
+		Provider: "zai",
+		Status:   coreauth.StatusActive,
+		Attributes: map[string]string{
+			"auth_kind": "apikey",
+			"api_key":   "zai-test-key",
+		},
+	}
+
+	service.ensureExecutorsForAuth(auth)
+	registeredExecutor, ok := service.coreManager.Executor("zai")
+	if !ok || registeredExecutor == nil {
+		t.Fatal("expected zai executor after bind")
+	}
+	if _, ok := registeredExecutor.(*executor.ZAIExecutor); !ok {
+		t.Fatalf("expected *executor.ZAIExecutor, got %T", registeredExecutor)
 	}
 }

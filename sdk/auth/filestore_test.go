@@ -1,6 +1,14 @@
 package auth
 
-import "testing"
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/auth/zai"
+	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
+)
 
 func TestExtractAccessToken(t *testing.T) {
 	t.Parallel()
@@ -76,5 +84,74 @@ func TestExtractAccessToken(t *testing.T) {
 				t.Errorf("extractAccessToken() = %q, want %q", got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestFileTokenStoreListDisablesZAIMissingOrBlankAPIKey(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	files := map[string]string{
+		"missing.json": `{"type":"zai"}`,
+		"blank.json":   `{"type":"zai","api_key":"   "}`,
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	store := NewFileTokenStore()
+	store.SetBaseDir(dir)
+	auths, err := store.List(context.Background())
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if len(auths) != len(files) {
+		t.Fatalf("List returned %d auths, want %d", len(auths), len(files))
+	}
+	for _, auth := range auths {
+		if !auth.Disabled || auth.Status != cliproxyauth.StatusDisabled {
+			t.Fatalf("%s: expected disabled Z.AI auth, disabled=%v status=%s", auth.ID, auth.Disabled, auth.Status)
+		}
+		if got := auth.Attributes["api_key"]; got != "" {
+			t.Fatalf("%s: expected no api_key attribute, got %q", auth.ID, got)
+		}
+	}
+}
+
+func TestFileTokenStoreListPreservesValidZAIKeys(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	files := map[string]string{
+		"snake.json":    `{"type":"zai","api_key":" snake-key "}`,
+		"kebab.json":    `{"type":"zai","api-key":"kebab-key"}`,
+		"fallback.json": `{"type":"zai","api_key":"   ","api-key":"fallback-key"}`,
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	store := NewFileTokenStore()
+	store.SetBaseDir(dir)
+	auths, err := store.List(context.Background())
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	gotKeys := make(map[string]string, len(auths))
+	for _, auth := range auths {
+		if auth.Disabled || auth.Status != cliproxyauth.StatusActive {
+			t.Fatalf("%s: expected active Z.AI auth, disabled=%v status=%s", auth.ID, auth.Disabled, auth.Status)
+		}
+		if got := auth.Attributes["base_url"]; got != zai.DefaultCodingBaseURL {
+			t.Fatalf("%s: base_url = %q, want %q", auth.ID, got, zai.DefaultCodingBaseURL)
+		}
+		gotKeys[auth.ID] = auth.Attributes["api_key"]
+	}
+	if gotKeys["snake.json"] != "snake-key" || gotKeys["kebab.json"] != "kebab-key" || gotKeys["fallback.json"] != "fallback-key" {
+		t.Fatalf("unexpected keys: %#v", gotKeys)
 	}
 }

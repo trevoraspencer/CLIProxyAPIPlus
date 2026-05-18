@@ -70,15 +70,20 @@ func TestXAIOAuthStaticModels(t *testing.T) {
 
 func TestZAIStaticModels(t *testing.T) {
 	models := GetZAIModels()
-	model := findModelInfo(models, "glm-5.1")
-	if model == nil {
-		t.Fatal("expected zai models to include glm-5.1")
-	}
-	if model.Type != "zai" || model.OwnedBy != "zai" {
-		t.Fatalf("glm-5.1 metadata = %+v", model)
-	}
-	if model.Thinking == nil {
-		t.Fatal("expected glm-5.1 to advertise thinking support")
+	for _, modelID := range []string{"glm-5.1", "glm-5", "glm-5-turbo"} {
+		model := findModelInfo(models, modelID)
+		if model == nil {
+			t.Fatalf("expected zai models to include %s", modelID)
+		}
+		if model.Type != "zai" || model.OwnedBy != "zai" {
+			t.Fatalf("%s metadata = %+v", modelID, model)
+		}
+		if !hasEndpoint(model.SupportedEndpoints, "/chat/completions") {
+			t.Fatalf("expected %s to support /chat/completions, got %+v", modelID, model.SupportedEndpoints)
+		}
+		if model.Thinking == nil {
+			t.Fatalf("expected %s to advertise thinking support", modelID)
+		}
 	}
 	if channelModels := GetStaticModelDefinitionsByChannel("zai"); findModelInfo(channelModels, "glm-5") == nil {
 		t.Fatal("expected zai static channel lookup to include glm-5")
@@ -86,6 +91,15 @@ func TestZAIStaticModels(t *testing.T) {
 	if lookup := LookupStaticModelInfo("glm-5.1"); lookup == nil || lookup.Type != "zai" {
 		t.Fatalf("LookupStaticModelInfo(glm-5.1) = %+v", lookup)
 	}
+}
+
+func hasEndpoint(endpoints []string, endpoint string) bool {
+	for _, candidate := range endpoints {
+		if candidate == endpoint {
+			return true
+		}
+	}
+	return false
 }
 
 func TestXAIOAuthModelsFallbackToRemoteXAISection(t *testing.T) {

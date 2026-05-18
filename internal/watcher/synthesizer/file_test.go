@@ -227,6 +227,56 @@ func TestFileSynthesizer_Synthesize_ZAIAPIKeyFileDefaultBaseURL(t *testing.T) {
 	}
 }
 
+func TestFileSynthesizer_Synthesize_ZAIAPIKeyFileSkipsMissingBlankKey(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+	}{
+		{
+			name: "missing api key",
+			data: `{"type":"zai","base_url":"https://custom.z.ai/v4"}`,
+		},
+		{
+			name: "blank api_key",
+			data: `{"type":"zai","api_key":"  ","base_url":"https://custom.z.ai/v4"}`,
+		},
+		{
+			name: "blank api-key",
+			data: `{"type":"zai","api-key":"  ","base-url":"https://custom.z.ai/v4"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			auths := SynthesizeAuthFile(&SynthesisContext{
+				Config:  &config.Config{},
+				AuthDir: t.TempDir(),
+				Now:     time.Now(),
+			}, filepath.Join(t.TempDir(), "zai-auth.json"), []byte(tt.data))
+			if len(auths) != 0 {
+				t.Fatalf("expected zero auths, got %d", len(auths))
+			}
+		})
+	}
+}
+
+func TestFileSynthesizer_Synthesize_ZAIAPIKeyFileKebabCase(t *testing.T) {
+	auths := SynthesizeAuthFile(&SynthesisContext{
+		Config:  &config.Config{},
+		AuthDir: t.TempDir(),
+		Now:     time.Now(),
+	}, filepath.Join(t.TempDir(), "zai-auth.json"), []byte(`{"type":"zai","api-key":"zai-kebab-key","base-url":"https://custom-kebab.z.ai/v4"}`))
+	if len(auths) != 1 {
+		t.Fatalf("expected 1 auth, got %d", len(auths))
+	}
+	if got := auths[0].Attributes["api_key"]; got != "zai-kebab-key" {
+		t.Fatalf("api_key = %q", got)
+	}
+	if got := auths[0].Attributes["base_url"]; got != "https://custom-kebab.z.ai/v4" {
+		t.Fatalf("base_url = %q", got)
+	}
+}
+
 func TestFileSynthesizer_Synthesize_SkipsInvalidFiles(t *testing.T) {
 	tempDir := t.TempDir()
 

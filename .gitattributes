@@ -15,7 +15,6 @@ go.sum merge=union
 # Our fork-maintenance files — always keep ours
 .github/workflows/upstream-sync.yml merge=ours
 .gitattributes merge=ours
-README-ccs-fork.md merge=ours
 
 # Image references diverge from upstream (Plus publishes official images to
 # kaitranntt/cli-proxy-api-plus with a GHCR mirror; upstream publishes to

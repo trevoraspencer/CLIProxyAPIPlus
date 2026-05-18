@@ -16,14 +16,24 @@ func applyZAIFileAPIKeyAttributes(auth *cliproxyauth.Auth, metadata map[string]a
 		auth.Attributes = make(map[string]string)
 	}
 	auth.Attributes["auth_kind"] = "apikey"
+	hasAPIKey := false
 	if rawKey, ok := metadata["api_key"].(string); ok {
 		if key := strings.TrimSpace(rawKey); key != "" {
 			auth.Attributes["api_key"] = key
+			hasAPIKey = true
 		}
-	} else if rawKey, ok := metadata["api-key"].(string); ok {
-		if key := strings.TrimSpace(rawKey); key != "" {
-			auth.Attributes["api_key"] = key
+	}
+	if !hasAPIKey {
+		if rawKey, ok := metadata["api-key"].(string); ok {
+			if key := strings.TrimSpace(rawKey); key != "" {
+				auth.Attributes["api_key"] = key
+				hasAPIKey = true
+			}
 		}
+	}
+	if !hasAPIKey {
+		auth.Disabled = true
+		auth.Status = cliproxyauth.StatusDisabled
 	}
 	baseURL := ""
 	if rawBase, ok := metadata["base_url"].(string); ok {

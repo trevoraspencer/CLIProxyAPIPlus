@@ -163,15 +163,19 @@ func synthesizeFileAuths(ctx *SynthesisContext, fullPath string, data []byte) []
 		authKind = "apikey"
 		a.Label = "zai-apikey"
 		a.Attributes["auth_kind"] = "apikey"
+		key := ""
 		if rawKey, ok := metadata["api_key"].(string); ok {
-			if key := strings.TrimSpace(rawKey); key != "" {
-				a.Attributes["api_key"] = key
-			}
-		} else if rawKey, ok := metadata["api-key"].(string); ok {
-			if key := strings.TrimSpace(rawKey); key != "" {
-				a.Attributes["api_key"] = key
+			key = strings.TrimSpace(rawKey)
+		}
+		if key == "" {
+			if rawKey, ok := metadata["api-key"].(string); ok {
+				key = strings.TrimSpace(rawKey)
 			}
 		}
+		if key == "" {
+			return nil
+		}
+		a.Attributes["api_key"] = key
 		baseURL := ""
 		if rawBase, ok := metadata["base_url"].(string); ok {
 			baseURL = strings.TrimSpace(rawBase)

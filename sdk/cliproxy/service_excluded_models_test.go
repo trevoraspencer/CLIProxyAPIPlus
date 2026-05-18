@@ -110,3 +110,65 @@ func TestRegisterModelsForAuth_XAIOAuthModelsAndExclusions(t *testing.T) {
 		t.Fatal("expected xai-oauth models to include grok-4.3")
 	}
 }
+
+func TestRegisterModelsForAuth_ZAIAPIKeyAliasesAndExclusions(t *testing.T) {
+	service := &Service{
+		cfg: &config.Config{
+			ZAIKey: []config.ZAIKey{
+				{
+					APIKey:         "zai-test-key",
+					Models:         []config.ZAIModel{{Name: "glm-5.1", Alias: "glm51"}, {Name: "glm-5", Alias: "glm5"}},
+					ExcludedModels: []string{"glm5"},
+				},
+			},
+		},
+	}
+	auth := &coreauth.Auth{
+		ID:       "zai-auth.json",
+		Provider: "zai",
+		Status:   coreauth.StatusActive,
+		Attributes: map[string]string{
+			"auth_kind": "apikey",
+			"api_key":   "zai-test-key",
+		},
+	}
+
+	registry := internalregistry.GetGlobalRegistry()
+	registry.UnregisterClient(auth.ID)
+	t.Cleanup(func() {
+		registry.UnregisterClient(auth.ID)
+	})
+
+	service.registerModelsForAuth(auth)
+	models := registry.GetModelsForClient(auth.ID)
+	if len(models) == 0 {
+		t.Fatal("expected zai models to be registered")
+	}
+
+	seenAlias := false
+	for _, model := range models {
+		if model == nil {
+			continue
+		}
+		switch strings.TrimSpace(model.ID) {
+		case "glm51":
+			seenAlias = true
+			if model.Type != "zai" || model.OwnedBy != "zai" {
+				t.Fatalf("zai alias metadata = %+v", model)
+			}
+			if model.DisplayName != "glm-5.1" {
+				t.Fatalf("zai alias display name = %q, want upstream model name", model.DisplayName)
+			}
+			if model.Thinking == nil {
+				t.Fatal("expected zai alias to preserve upstream thinking metadata")
+			}
+		case "glm5":
+			t.Fatalf("excluded zai alias %q was registered", model.ID)
+		case "glm-5.1", "glm-5":
+			t.Fatalf("expected configured zai aliases instead of upstream model id %q", model.ID)
+		}
+	}
+	if !seenAlias {
+		t.Fatal("expected zai models to include configured alias glm51")
+	}
+}
