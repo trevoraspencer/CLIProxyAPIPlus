@@ -7,33 +7,14 @@ import (
 	"fmt"
 )
 
-// PKCECodes contains the verifier/challenge pair used by the OAuth code flow.
-type PKCECodes struct {
-	CodeVerifier  string
-	CodeChallenge string
-}
-
-// GeneratePKCECodes creates a cryptographically random PKCE S256 verifier/challenge pair.
+// GeneratePKCECodes creates a verifier/challenge pair for the OAuth flow.
 func GeneratePKCECodes() (*PKCECodes, error) {
-	verifier, err := generateCodeVerifier()
-	if err != nil {
-		return nil, err
-	}
-	return &PKCECodes{
-		CodeVerifier:  verifier,
-		CodeChallenge: generateCodeChallenge(verifier),
-	}, nil
-}
-
-func generateCodeVerifier() (string, error) {
 	bytes := make([]byte, 96)
 	if _, err := rand.Read(bytes); err != nil {
-		return "", fmt.Errorf("xai oauth pkce: generate verifier: %w", err)
+		return nil, fmt.Errorf("xai pkce: generate verifier: %w", err)
 	}
-	return base64.RawURLEncoding.EncodeToString(bytes), nil
-}
-
-func generateCodeChallenge(verifier string) string {
+	verifier := base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(bytes)
 	hash := sha256.Sum256([]byte(verifier))
-	return base64.RawURLEncoding.EncodeToString(hash[:])
+	challenge := base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(hash[:])
+	return &PKCECodes{CodeVerifier: verifier, CodeChallenge: challenge}, nil
 }

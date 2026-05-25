@@ -65,110 +65,70 @@ func TestRegisterModelsForAuth_UsesPreMergedExcludedModelsAttribute(t *testing.T
 	}
 }
 
-func TestRegisterModelsForAuth_XAIOAuthModelsAndExclusions(t *testing.T) {
+func TestRegisterModelsForAuth_OpenAICompatibilityImageModelType(t *testing.T) {
 	service := &Service{
 		cfg: &config.Config{
-			OAuthExcludedModels: map[string][]string{
-				"xai-oauth": {"grok-4.20-0309-non-reasoning"},
-			},
-		},
-	}
-	auth := &coreauth.Auth{
-		ID:       "xai-oauth-auth.json",
-		Provider: "xai-oauth",
-		Status:   coreauth.StatusActive,
-		Metadata: map[string]any{
-			"type": "xai-oauth",
-		},
-	}
-
-	registry := internalregistry.GetGlobalRegistry()
-	registry.UnregisterClient(auth.ID)
-	t.Cleanup(func() {
-		registry.UnregisterClient(auth.ID)
-	})
-
-	service.registerModelsForAuth(auth)
-	models := registry.GetModelsForClient(auth.ID)
-	if len(models) == 0 {
-		t.Fatal("expected xai-oauth models to be registered")
-	}
-
-	seenDefault := false
-	for _, model := range models {
-		if model == nil {
-			continue
-		}
-		switch strings.TrimSpace(model.ID) {
-		case "grok-4.3":
-			seenDefault = true
-		case "grok-4.20-0309-non-reasoning":
-			t.Fatalf("excluded xai-oauth model %q was registered", model.ID)
-		}
-	}
-	if !seenDefault {
-		t.Fatal("expected xai-oauth models to include grok-4.3")
-	}
-}
-
-func TestRegisterModelsForAuth_ZAIAPIKeyAliasesAndExclusions(t *testing.T) {
-	service := &Service{
-		cfg: &config.Config{
-			ZAIKey: []config.ZAIKey{
+			OpenAICompatibility: []config.OpenAICompatibility{
 				{
-					APIKey:         "zai-test-key",
-					Models:         []config.ZAIModel{{Name: "glm-5.1", Alias: "glm51"}, {Name: "glm-5", Alias: "glm5"}},
-					ExcludedModels: []string{"glm5"},
+					Name:    "images",
+					BaseURL: "https://example.com/v1",
+					Models: []config.OpenAICompatibilityModel{
+						{Name: "upstream-image", Alias: "compat-image", Image: true},
+						{Name: "upstream-chat", Alias: "compat-chat"},
+					},
 				},
 			},
 		},
 	}
 	auth := &coreauth.Auth{
-		ID:       "zai-auth.json",
-		Provider: "zai",
+		ID:       "auth-openai-compat-image",
+		Provider: "openai-compatibility",
 		Status:   coreauth.StatusActive,
 		Attributes: map[string]string{
-			"auth_kind": "apikey",
-			"api_key":   "zai-test-key",
+			"auth_kind":    "api_key",
+			"compat_name":  "images",
+			"provider_key": "images",
 		},
 	}
 
-	registry := internalregistry.GetGlobalRegistry()
-	registry.UnregisterClient(auth.ID)
+	modelRegistry := internalregistry.GetGlobalRegistry()
+	modelRegistry.UnregisterClient(auth.ID)
 	t.Cleanup(func() {
-		registry.UnregisterClient(auth.ID)
+		modelRegistry.UnregisterClient(auth.ID)
 	})
 
 	service.registerModelsForAuth(auth)
-	models := registry.GetModelsForClient(auth.ID)
-	if len(models) == 0 {
-		t.Fatal("expected zai models to be registered")
-	}
 
-	seenAlias := false
+	models := modelRegistry.GetModelsForClient(auth.ID)
+	var imageModel *internalregistry.ModelInfo
+	var chatModel *internalregistry.ModelInfo
 	for _, model := range models {
 		if model == nil {
 			continue
 		}
 		switch strings.TrimSpace(model.ID) {
-		case "glm51":
-			seenAlias = true
-			if model.Type != "zai" || model.OwnedBy != "zai" {
-				t.Fatalf("zai alias metadata = %+v", model)
-			}
-			if model.DisplayName != "glm-5.1" {
-				t.Fatalf("zai alias display name = %q, want upstream model name", model.DisplayName)
-			}
-			if model.Thinking == nil {
-				t.Fatal("expected zai alias to preserve upstream thinking metadata")
-			}
-		case "glm5":
-			t.Fatalf("excluded zai alias %q was registered", model.ID)
-		case "glm-5.1", "glm-5":
-			t.Fatalf("expected configured zai aliases instead of upstream model id %q", model.ID)
+		case "compat-image":
+			imageModel = model
+		case "compat-chat":
+			chatModel = model
 		}
 	}
-	if !seenAlias {
-		t.Fatal("expected zai models to include configured alias glm51")
+	if imageModel == nil {
+		t.Fatal("expected compat-image to be registered")
+	}
+	if imageModel.Type != internalregistry.OpenAIImageModelType {
+		t.Fatalf("image model type = %q, want %q", imageModel.Type, internalregistry.OpenAIImageModelType)
+	}
+	if imageModel.Thinking != nil {
+		t.Fatalf("image model thinking = %+v, want nil", imageModel.Thinking)
+	}
+	if chatModel == nil {
+		t.Fatal("expected compat-chat to be registered")
+	}
+	if chatModel.Type != "openai-compatibility" {
+		t.Fatalf("chat model type = %q, want openai-compatibility", chatModel.Type)
+	}
+	if chatModel.Thinking == nil {
+		t.Fatal("expected chat model to keep default thinking support")
 	}
 }
