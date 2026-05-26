@@ -93,6 +93,50 @@ func TestDeepSeekStreamCaptureCleanEOFCommitsButMalformedDoesNot(t *testing.T) {
 	}
 }
 
+func TestDeepSeekStreamCaptureSSEErrorDoesNotCommitPartialReasoning(t *testing.T) {
+	scope := deepSeekReasoningScope{Provider: "openai-compatibility", Auth: "auth-a", Model: "deepseek-chat", Session: "session-a"}
+	cache := newDeepSeekReasoningCache(10, time.Minute)
+	capture := newDeepSeekStreamCapture(scope, cache)
+	capture.ObserveLine([]byte(`data: {"choices":[{"index":0,"delta":{"reasoning_content":"partial reasoning","tool_calls":[{"index":0,"id":"call-error","type":"function","function":{"name":"edit","arguments":"{}"}}]}}]}`))
+	capture.ObserveLine([]byte(`data: {"error":{"message":"upstream failed","type":"server_error"}}`))
+	capture.ObserveLine([]byte(`data: [DONE]`))
+	if cache.Len() != 0 {
+		t.Fatalf("SSE error object after partial fragments populated cache; len=%d", cache.Len())
+	}
+}
+
+func TestDeepSeekStreamCaptureIncompleteToolCallsDoNotCommit(t *testing.T) {
+	scope := deepSeekReasoningScope{Provider: "openai-compatibility", Auth: "auth-a", Model: "deepseek-chat", Session: "session-a"}
+	cases := []struct {
+		name string
+		line string
+	}{
+		{
+			name: "id only",
+			line: `data: {"choices":[{"index":0,"delta":{"reasoning_content":"partial reasoning","tool_calls":[{"index":0,"id":"call-id-only"}]}}]}`,
+		},
+		{
+			name: "missing function name",
+			line: `data: {"choices":[{"index":0,"delta":{"reasoning_content":"partial reasoning","tool_calls":[{"index":0,"id":"call-missing-name","type":"function","function":{"arguments":"{}"}}]}}]}`,
+		},
+		{
+			name: "missing function arguments",
+			line: `data: {"choices":[{"index":0,"delta":{"reasoning_content":"partial reasoning","tool_calls":[{"index":0,"id":"call-missing-args","type":"function","function":{"name":"edit"}}]}}]}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cache := newDeepSeekReasoningCache(10, time.Minute)
+			capture := newDeepSeekStreamCapture(scope, cache)
+			capture.ObserveLine([]byte(tc.line))
+			capture.ObserveLine([]byte(`data: [DONE]`))
+			if cache.Len() != 0 {
+				t.Fatalf("incomplete streaming tool call populated cache; len=%d line=%s", cache.Len(), tc.line)
+			}
+		})
+	}
+}
+
 func TestDeepSeekStreamNonDeepSeekPassThroughWithPrepopulatedCache(t *testing.T) {
 	restore := replaceDefaultDeepSeekCacheForTest(t)
 	defer restore()

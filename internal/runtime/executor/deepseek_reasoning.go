@@ -301,16 +301,45 @@ func deepSeekCaptureNonStreamReasoning(body []byte, scope deepSeekReasoningScope
 		if !okMessage {
 			continue
 		}
+		if strings.TrimSpace(stringFromAny(message["role"])) != "assistant" {
+			continue
+		}
 		reasoning, okReasoning := message["reasoning_content"].(string)
 		if !okReasoning || strings.TrimSpace(reasoning) == "" {
 			continue
 		}
-		toolCalls, okTools := message["tool_calls"].([]any)
-		if !okTools || len(toolCalls) == 0 {
+		if !deepSeekValidToolCalls(message["tool_calls"]) {
 			continue
 		}
 		cache.Store(deepSeekReasoningKeyForMessage(scope, message), reasoning)
 	}
+}
+
+func deepSeekValidToolCalls(raw any) bool {
+	toolCalls, ok := raw.([]any)
+	if !ok || len(toolCalls) == 0 {
+		return false
+	}
+	for _, rawTool := range toolCalls {
+		tool, okTool := rawTool.(map[string]any)
+		if !okTool {
+			return false
+		}
+		if strings.TrimSpace(stringFromAny(tool["id"])) == "" {
+			return false
+		}
+		fn, okFunction := tool["function"].(map[string]any)
+		if !okFunction {
+			return false
+		}
+		if strings.TrimSpace(stringFromAny(fn["name"])) == "" {
+			return false
+		}
+		if _, okArguments := fn["arguments"].(string); !okArguments {
+			return false
+		}
+	}
+	return true
 }
 
 func deepSeekReasoningKeyForMessage(scope deepSeekReasoningScope, message map[string]any) deepSeekReasoningKey {

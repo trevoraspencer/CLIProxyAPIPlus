@@ -27,6 +27,9 @@ type deepSeekStreamToolCall struct {
 	typ       strings.Builder
 	name      strings.Builder
 	arguments strings.Builder
+	idSeen    bool
+	nameSeen  bool
+	argsSeen  bool
 }
 
 func newDeepSeekStreamCapture(scope deepSeekReasoningScope, cache *deepSeekReasoningCache) *deepSeekStreamCapture {
@@ -56,6 +59,10 @@ func (c *deepSeekStreamCapture) ObserveLine(line []byte) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
 	if err := decoder.Decode(&root); err != nil {
+		c.failed = true
+		return
+	}
+	if _, hasError := root["error"]; hasError {
 		c.failed = true
 		return
 	}
@@ -108,6 +115,7 @@ func (c *deepSeekStreamCapture) ObserveLine(line []byte) {
 			toolState := state.tool(toolIndex)
 			if id, okID := tool["id"].(string); okID {
 				toolState.id.WriteString(id)
+				toolState.idSeen = true
 			}
 			if typ, okType := tool["type"].(string); okType {
 				toolState.typ.WriteString(typ)
@@ -115,9 +123,11 @@ func (c *deepSeekStreamCapture) ObserveLine(line []byte) {
 			if fn, okFunction := tool["function"].(map[string]any); okFunction {
 				if name, okName := fn["name"].(string); okName {
 					toolState.name.WriteString(name)
+					toolState.nameSeen = true
 				}
 				if arguments, okArguments := fn["arguments"].(string); okArguments {
 					toolState.arguments.WriteString(arguments)
+					toolState.argsSeen = true
 				}
 			}
 		}
@@ -141,7 +151,8 @@ func (c *deepSeekStreamCapture) Commit() {
 		toolCalls := make([]any, 0, len(indexes))
 		for _, index := range indexes {
 			tool := choice.tools[index]
-			if tool == nil || strings.TrimSpace(tool.id.String()) == "" {
+			if tool == nil || !tool.idSeen || !tool.nameSeen || !tool.argsSeen ||
+				strings.TrimSpace(tool.id.String()) == "" || strings.TrimSpace(tool.name.String()) == "" {
 				toolCalls = nil
 				break
 			}

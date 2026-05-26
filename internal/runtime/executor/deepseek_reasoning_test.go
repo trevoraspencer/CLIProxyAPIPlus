@@ -169,6 +169,48 @@ func TestDeepSeekNonStreamCaptureStoresEligibleReasoningOnly(t *testing.T) {
 	}
 }
 
+func TestDeepSeekNonStreamCaptureRejectsNonAssistantAndInvalidToolCalls(t *testing.T) {
+	scope := deepSeekReasoningScope{Provider: "openai-compatibility", Auth: "auth-a", Model: "deepseek-chat", Session: "session-a"}
+	cases := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "user role",
+			body: `{"choices":[{"message":{"role":"user","reasoning_content":"do not cache","tool_calls":[{"id":"call-user","type":"function","function":{"name":"edit","arguments":"{}"}}]}}]}`,
+		},
+		{
+			name: "tool role",
+			body: `{"choices":[{"message":{"role":"tool","reasoning_content":"do not cache","tool_calls":[{"id":"call-tool","type":"function","function":{"name":"edit","arguments":"{}"}}]}}]}`,
+		},
+		{
+			name: "missing role",
+			body: `{"choices":[{"message":{"reasoning_content":"do not cache","tool_calls":[{"id":"call-missing-role","type":"function","function":{"name":"edit","arguments":"{}"}}]}}]}`,
+		},
+		{
+			name: "missing id",
+			body: `{"choices":[{"message":{"role":"assistant","reasoning_content":"do not cache","tool_calls":[{"type":"function","function":{"name":"edit","arguments":"{}"}}]}}]}`,
+		},
+		{
+			name: "missing function name",
+			body: `{"choices":[{"message":{"role":"assistant","reasoning_content":"do not cache","tool_calls":[{"id":"call-missing-name","type":"function","function":{"arguments":"{}"}}]}}]}`,
+		},
+		{
+			name: "missing function arguments",
+			body: `{"choices":[{"message":{"role":"assistant","reasoning_content":"do not cache","tool_calls":[{"id":"call-missing-args","type":"function","function":{"name":"edit"}}]}}]}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cache := newDeepSeekReasoningCache(10, time.Minute)
+			deepSeekCaptureNonStreamReasoning([]byte(tc.body), scope, cache)
+			if cache.Len() != 0 {
+				t.Fatalf("ineligible non-stream response populated cache; len=%d body=%s", cache.Len(), tc.body)
+			}
+		})
+	}
+}
+
 func TestDeepSeekNonStreamExecutorCaptureThenPatchDroidReplay(t *testing.T) {
 	restore := replaceDefaultDeepSeekCacheForTest(t)
 	defer restore()
