@@ -127,6 +127,13 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 		}
 	}
 
+	deepSeekReasoning := endpoint == "/chat/completions" && e.deepSeekReasoningEnabled(auth, baseURL)
+	var deepSeekScope deepSeekReasoningScope
+	if deepSeekReasoning {
+		deepSeekScope = deepSeekReasoningScopeFor(e, auth, deepSeekFinalPayloadModel(translated, baseModel), opts)
+		translated = deepSeekPatchRequestReasoning(translated, deepSeekScope, defaultDeepSeekReasoningCache)
+	}
+
 	url := strings.TrimSuffix(baseURL, "/") + endpoint
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(translated))
 	if err != nil {
@@ -185,6 +192,9 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 		return resp, err
 	}
 	helps.AppendAPIResponseChunk(ctx, e.cfg, body)
+	if deepSeekReasoning {
+		deepSeekCaptureNonStreamReasoning(body, deepSeekScope, defaultDeepSeekReasoningCache)
+	}
 	reporter.Publish(ctx, helps.ParseOpenAIUsage(body))
 	// Ensure we at least record the request even if upstream doesn't return usage
 	reporter.EnsurePublished(ctx)
