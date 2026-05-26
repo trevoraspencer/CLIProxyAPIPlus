@@ -1,9 +1,9 @@
 {
   "milestone": "deepseek-droid-compat",
-  "round": 2,
-  "status": "fail",
-  "generatedAt": "2026-05-26T06:03:42.436477+00:00",
-  "rerunReason": "Rerun after fixes for DeepSeek capture safety, model-listing coverage, Codex timeout Manager semantics, and final-validation artifact scope.",
+  "round": 3,
+  "status": "pass",
+  "generatedAt": "2026-05-26T06:15:35.963125Z",
+  "rerunReason": "Rerun after `.factory/research/provider-research.md` scope cleanup and broader Factory artifact directory guidance.",
   "validatorsRun": {
     "lint": {
       "passed": true,
@@ -27,7 +27,7 @@
       "passed": true,
       "command": "go test ./internal/runtime/executor -run 'TestDeepSeek|TestOpenAICompat' -count=1",
       "exitCode": 0,
-      "observation": "Executor DeepSeek/OpenAI-compatible targeted tests passed."
+      "observation": "Executor DeepSeek/OpenAI-compatible targeted tests passed in internal/runtime/executor."
     },
     "model_listing": {
       "passed": true,
@@ -39,7 +39,7 @@
       "passed": true,
       "command": "go test -race ./internal/runtime/executor -run 'TestDeepSeek.*Cache|TestDeepSeek.*Concurrent' -count=1",
       "exitCode": 0,
-      "observation": "Race-enabled DeepSeek cache/concurrency command passed."
+      "observation": "Race-enabled DeepSeek cache/concurrency command passed in internal/runtime/executor."
     },
     "test": {
       "passed": true,
@@ -63,109 +63,60 @@
       "passed": true,
       "command": "go test ./internal/runtime/executor -list 'DeepSeek|OpenAICompat'",
       "exitCode": 0,
-      "observation": "Listed concrete TestDeepSeek and TestOpenAICompat executor tests, including capture, replay, non-DeepSeek pass-through, CountTokens, logging, and stream cases."
+      "observation": "Listed concrete TestDeepSeek and TestOpenAICompat executor tests, including conservative detection, cache/keying, non-stream capture/replay, streaming capture/replay, non-DeepSeek pass-through, CountTokens, logging, and stream cases."
     },
     "model_listing_list": {
       "passed": true,
       "command": "go test ./internal/watcher/synthesizer ./sdk/cliproxy ./internal/registry ./internal/api ./sdk/cliproxy/auth -list 'DeepSeek.*Model|Model.*DeepSeek|deepseek'",
       "exitCode": 0,
-      "observation": "Listed DeepSeek model-listing tests in sdk/cliproxy and internal/api, including config/auth/registry, prefix, negative/removal, non-DeepSeek provider, and API JSON cases."
+      "observation": "Listed DeepSeek model-listing tests in sdk/cliproxy and internal/api, including config/auth/registry path, prefix/force-prefix, negative/removal, non-DeepSeek provider, and API JSON cases."
+    },
+    "local_proxy_readiness_probe": {
+      "passed": true,
+      "command": "curl -sS -o /dev/null -w 'HTTP_STATUS:%{http_code}\\n' --max-time 5 http://127.0.0.1:8318/v1/models",
+      "exitCode": 0,
+      "observation": "Allowed unauthenticated readiness probe returned HTTP_STATUS:401 from the user-owned local proxy; no Authorization header or inference request was sent."
     }
   },
-  "reviewMode": "rerun-after-round-1-fixes",
+  "reviewMode": "rerun-after-round-2-fix",
   "featuresReviewed": [
     {
-      "fixFeatureId": "fix-deepseek-reasoning-capture-safety",
+      "fixFeatureId": "cleanup-final-validation-research-artifact-scope",
       "addressesOriginalFailedFeatures": [
-        "implement-missing-deepseek-core-nonstream",
-        "deepseek-streaming-capture-replay",
-        "implement-missing-deepseek-stream-regressions"
-      ]
-    },
-    {
-      "fixFeatureId": "restore-deepseek-model-listing-coverage",
-      "addressesOriginalFailedFeatures": [
-        "config-driven-deepseek-model-listing"
-      ]
-    },
-    {
-      "fixFeatureId": "repair-codex-timeout-manager-semantics",
-      "addressesOriginalFailedFeatures": [
-        "repair-codex-timeout-cooldown-compile"
-      ]
-    },
-    {
-      "fixFeatureId": "cleanup-final-validation-artifact-scope-and-rerun",
-      "addressesOriginalFailedFeatures": [
-        "final-validation-smoke-handoff-and-docs"
-      ]
+        "cleanup-final-validation-artifact-scope-and-rerun"
+      ],
+      "priorFailure": "Round 2 found `.factory/research/provider-research.md` retained and misclassified as DeepSeek mission context."
     }
   ],
   "reviewsSummary": {
-    "total": 4,
-    "passed": 3,
-    "failed": 1,
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
     "passedFeatures": [
-      "fix-deepseek-reasoning-capture-safety",
-      "restore-deepseek-model-listing-coverage",
-      "repair-codex-timeout-manager-semantics"
+      "cleanup-final-validation-research-artifact-scope"
     ],
-    "failedFeatures": [
-      "cleanup-final-validation-artifact-scope-and-rerun"
-    ],
+    "failedFeatures": [],
     "reviewReports": [
       {
-        "featureId": "fix-deepseek-reasoning-capture-safety",
+        "featureId": "cleanup-final-validation-research-artifact-scope",
         "status": "pass",
-        "commitId": "1f05bd67a682e87dafe606863fc25ff7ceeb89d3",
-        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/fix-deepseek-reasoning-capture-safety.json",
-        "summary": "Pass: commit 1f05bd67 is present on the active pr/codex-hang-failover branch and adequately fixes the non-stream assistant/valid-tool-call eligibility gap plus the streaming SSE-error and incomplete-tool-call cache-commit gaps while preserving normal usage-only chunks and stream output behavior.",
+        "commitId": "eb03e831dfbd86720a9cf002e71a44256c0b16b8",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/cleanup-final-validation-research-artifact-scope.json",
+        "summary": "Pass: the fix removes the unrelated research artifact and updates final evidence so Factory artifact directories are scoped accurately; no blocking issues were found.",
         "issuesCount": 0
-      },
-      {
-        "featureId": "restore-deepseek-model-listing-coverage",
-        "status": "pass",
-        "commitId": "63eb0bd9e305c87117a88ce94d64595ad6a51003",
-        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/restore-deepseek-model-listing-coverage.json",
-        "summary": "Pass: the fix adequately addresses the prior blocker that current HEAD lacked DeepSeek-specific model-listing tests. Evidence reviewed includes sdk/cliproxy/deepseek_model_listing_test.go, internal/api/server_test.go, sdk/cliproxy/service.go, the handoff/transcript skeleton, and commit reachability showing 63eb0bd9 is an ancestor of HEAD.",
-        "issuesCount": 0
-      },
-      {
-        "featureId": "repair-codex-timeout-manager-semantics",
-        "status": "pass",
-        "commitId": "c5b7d27b22373dab4ce3ca2bf871b4732eda17f7",
-        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/repair-codex-timeout-manager-semantics.json",
-        "summary": "Reviewed the fix feature record, handoff, transcript skeleton, prior failed review, worker skill, shared-state files, and commit c5b7d27b diff. The implementation addresses the prior blocking issues and should pass scrutiny.",
-        "issuesCount": 0
-      },
-      {
-        "featureId": "cleanup-final-validation-artifact-scope-and-rerun",
-        "status": "fail",
-        "commitId": "e20ec6b4d0d226b8b51ea83cfb8971f421e40ec2",
-        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/cleanup-final-validation-artifact-scope-and-rerun.json",
-        "summary": "Fail: the fix removes the prior unrelated docs/validation directories and includes rerun validator/build evidence, but it still retains and misclassifies an unrelated Z.AI/OpenCode `.factory/research` artifact from the over-scoped final-validation commit.",
-        "issuesCount": 1
       }
     ]
   },
-  "blockingIssues": [
-    {
-      "featureId": "cleanup-final-validation-artifact-scope-and-rerun",
-      "severity": "blocking",
-      "description": "The final-validation scope cleanup still retains and misclassifies an unrelated .factory/research/provider-research.md artifact as DeepSeek mission context, even though that tracked file contains Z.AI, VibeProxy, and OpenCode Zen/Go research with no DeepSeek content.",
-      "evidence": "Review report cleanup-final-validation-artifact-scope-and-rerun.json flags .factory/library/final-validation-smoke-handoff.md line 28 and .factory/research/provider-research.md lines 3-15; direct inspection confirmed provider-research.md is tracked and contains unrelated Z.AI/VibeProxy/OpenCode research notes.",
-      "suggestedFix": "Remove or split the unrelated .factory/research/provider-research.md artifact from the current DeepSeek validation scope, or update final evidence so any retained research file is explicitly not claimed as DeepSeek context and is justified by current milestone relevance."
-    }
-  ],
+  "blockingIssues": [],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
-      "target": "AGENTS.md / final-validation guidance",
-      "suggestion": "Broaden artifact-scope guidance to cover all unrelated Factory artifact directories, not only .factory/docs and non-DeepSeek .factory/validation, so workers do not retain unrelated .factory/research artifacts as milestone context.",
-      "evidence": "The cleanup review found .factory/research/provider-research.md was retained and described as DeepSeek mission context even though it contains Z.AI/OpenCode/VibeProxy notes from unrelated work.",
+      "target": ".factory/skills/go-provider-worker/SKILL.md",
+      "suggestion": "Broaden final-validation/evidence artifact-scope guidance from only `.factory/docs` and `.factory/validation` to all Factory artifact directories, including `.factory/docs`, `.factory/research`, `.factory/validation`, `.factory/library`, and `.factory/skills`.",
+      "evidence": "Review cleanup-final-validation-research-artifact-scope noted `.factory/skills/go-provider-worker/SKILL.md:29` still mentions only `.factory/docs` and `.factory/validation`, while mission AGENTS.md now covers all Factory artifact directories and the fix removed `.factory/research/provider-research.md` from DeepSeek evidence.",
       "isSystemic": false
     }
   ],
   "rejectedObservations": [],
-  "previousRound": ".factory/validation/deepseek-droid-compat/scrutiny/synthesis.round1.json"
+  "previousRound": ".factory/validation/deepseek-droid-compat/scrutiny/synthesis.round2.json"
 }
