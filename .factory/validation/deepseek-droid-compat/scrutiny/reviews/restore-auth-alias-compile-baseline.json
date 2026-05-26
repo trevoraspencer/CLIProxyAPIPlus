@@ -1,0 +1,45 @@
+{
+  "featureId": "restore-auth-alias-compile-baseline",
+  "reviewedAt": "2026-05-26T05:16:08.314774Z",
+  "commitId": "37b75be1c21aee13807670198856a4e120338fc0",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The handoff records passing baseline auth/alias tests, full tests, and build, but the reviewed commit is not a narrow baseline repair: it commits Codex timeout/timing/config scaffolding that is unreferenced in the reviewed commit and not covered by focused tests. That fails the feature's isolation/narrowness requirement for the pre-existing worktree changes even though compile was restored.",
+    "issues": [
+      {
+        "file": "internal/runtime/executor/codex_executor.go",
+        "line": 42,
+        "severity": "blocking",
+        "description": "The commit introduces AvailableCodexAuthsMetadataKey plus codexTimingTrace/newCodexTimingTrace/logCodexTiming helpers, but `git grep` of the reviewed commit finds only their definitions and no production callers. This Codex diagnostics/retry scaffolding is unrelated to the auth/alias baseline behavior and is untested, so pre-existing Codex worktree changes were mixed into the baseline commit rather than isolated."
+      },
+      {
+        "file": "sdk/cliproxy/auth/selector.go",
+        "line": 430,
+        "severity": "blocking",
+        "description": "The commit adds exported ApplyTimeoutCooldown with no callers and no focused tests in the reviewed commit. Existing alias/fill-first/session tests do not exercise this new timeout-cooldown helper, leaving a public baseline helper unverified despite the feature requirement to keep helper additions used and tested."
+      },
+      {
+        "file": "internal/config/sdk_config.go",
+        "line": 26,
+        "severity": "blocking",
+        "description": "The commit adds user-visible codex-timeout-retries and codex-timeout-cooldown-seconds config fields/defaults, but the reviewed commit has no uses or tests for those settings. This is additional Codex timeout behavior/config surface, not required for preserving the auth/alias baseline, and should have been isolated from this feature or justified with focused coverage."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The feature's skillName is go-compat-worker and the worker transcript invoked go-compat-worker, but the current repo .factory/skills directory no longer contains go-compat-worker/SKILL.md. Future workers/reviewers cannot inspect the expected procedure from the path required by the review prompt unless they know to recover it from history or use go-provider-worker instead.",
+      "evidence": "Read of /Users/trevor/code/CLIProxyAPIPlus/.factory/skills/go-compat-worker/SKILL.md failed ENOENT; current /Users/trevor/code/CLIProxyAPIPlus/.factory/skills lists only config-docs-worker, docs-cleanup-worker, and go-provider-worker. The archived parent commit a9daa9027db4e85e827442ed5490309e1514fbb3 contains .factory/skills/go-compat-worker/SKILL.md with procedure step 2: identify pre-existing/unrelated files and do not claim or commit unrelated changes."
+    },
+    {
+      "area": "conventions",
+      "observation": "The mission guidance and archived go-compat-worker skill both require isolation of pre-existing unrelated worktree changes, but the worker handoff can be read as treating every initially dirty file as part of the baseline repair. The shared guidance may need sharper criteria for deciding when a dirty compile-blocking Codex change should be fixed/committed versus stashed/excluded.",
+      "evidence": "Handoff verification inventory listed initial dirty files internal/config/config.go, internal/config/sdk_config.go, internal/runtime/executor/codex_executor.go, and sdk/cliproxy/auth/selector.go; commit 37b75be1 changed those same four files. Mission AGENTS.md says pre-existing unrelated worktree changes must be isolated; archived go-compat-worker SKILL.md step 10 says to commit only files in feature scope."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: I reviewed the feature record, handoff, transcript skeleton, archived/current skill state, mission shared state, and commit diff. The reported tests/build passed, but the reviewed commit includes unreferenced, untested Codex timeout/timing/config scaffolding that should have been isolated from the narrow auth/alias baseline repair."
+}

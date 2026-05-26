@@ -1,0 +1,39 @@
+{
+  "featureId": "deepseek-request-patching-nonstream-capture",
+  "reviewedAt": "2026-05-26T05:16:20Z",
+  "commitId": "bd0be1f7001b0f8b4927361924a7fbcdcb634e96",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The bd0be1f diff itself wires non-stream DeepSeek request patching after translation/thinking/payload config and before request logging/sending, and observes successful non-stream responses without mutating the response bytes. However, the reviewed commit was made on a different local branch and is not an ancestor of the current milestone branch, so this feature as handed off did not actually land the claimed implementation where validation would consume it.",
+    "issues": [
+      {
+        "file": "git history",
+        "line": 0,
+        "severity": "blocking",
+        "description": "The reviewed commit bd0be1f7001b0f8b4927361924a7fbcdcb634e96 is only contained by branch pr/codex-hang-diagnostics-failover, while current HEAD is on pr/codex-hang-failover and `git merge-base --is-ancestor bd0be1f7001b0f8b4927361924a7fbcdcb634e96 HEAD` returned exit 1. The worker transcript also shows an explicit checkout to pr/codex-hang-diagnostics-failover before continuing. Therefore the feature handoff did not deliver the non-stream patch to the mission branch."
+      },
+      {
+        "file": "internal/runtime/executor/deepseek_compat_test.go",
+        "line": 385,
+        "severity": "non_blocking",
+        "description": "VAL-DS-016 requires deterministic handling for duplicate non-stream cache keys. The capture tests added here cover eligible, empty, malformed, failed, and non-DeepSeek responses, but do not pin duplicate-key behavior. The implementation would overwrite with the later matching choice, but that rule is not explicitly tested."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The mission/repo shared guidance did not prevent a worker from committing a completed feature on a different local branch from the active milestone branch. This branch mismatch was consequential: the handoff commit was absent from current HEAD and later mission notes recorded that the DeepSeek executor shim was missing from the current branch.",
+      "evidence": "Transcript skeleton line 4 shows `git checkout pr/codex-hang-diagnostics-failover`; `git branch --contains bd0be1f7001b0f8b4927361924a7fbcdcb634e96` lists only that branch; current `git log --oneline --decorate -15` shows HEAD on `pr/codex-hang-failover`; mission AGENTS.md final validation notes say the DeepSeek executor shim was absent and required follow-up features."
+    },
+    {
+      "area": "skills",
+      "observation": "The completed feature declares `skillName: go-compat-worker`, and the transcript invokes that skill, but the repo has no `.factory/skills/go-compat-worker/SKILL.md` to audit. The mission AGENTS.md contains a fallback note to use `go-provider-worker` if `go-compat-worker` is unavailable, but completed features still reference the missing skill.",
+      "evidence": "features.json entry for `deepseek-request-patching-nonstream-capture` has `skillName: go-compat-worker`; reading `/Users/trevor/code/CLIProxyAPIPlus/.factory/skills/go-compat-worker/SKILL.md` failed with ENOENT; `.factory/skills` lists only `config-docs-worker`, `docs-cleanup-worker`, and `go-provider-worker`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Failed review: the non-stream patch code in the handoff commit is broadly aligned with the feature requirements, but the commit was not on the active milestone branch, so the feature was not actually delivered to the branch under review. I also noted a non-blocking duplicate-cache-key coverage gap and two shared-state observations around branch guidance and the missing go-compat-worker skill file."
+}
