@@ -201,7 +201,7 @@ func collectAvailableByPriority(auths []*Auth, model string, now time.Time) (ava
 	available = make(map[int][]*Auth)
 	for i := 0; i < len(auths); i++ {
 		candidate := auths[i]
-		blocked, reason, next := isAuthBlockedForModel(candidate, model, now)
+		blocked, reason, next := IsAuthBlockedForModel(candidate, model, now)
 		if !blocked {
 			priority := authPriority(candidate)
 			available[priority] = append(available[priority], candidate)
@@ -368,7 +368,7 @@ func (s *FillFirstSelector) Pick(ctx context.Context, provider, model string, op
 	return available[0], nil
 }
 
-func isAuthBlockedForModel(auth *Auth, model string, now time.Time) (bool, blockReason, time.Time) {
+func IsAuthBlockedForModel(auth *Auth, model string, now time.Time) (bool, blockReason, time.Time) {
 	if auth == nil {
 		return true, blockReasonOther, time.Time{}
 	}
@@ -425,6 +425,10 @@ func isAuthBlockedForModel(auth *Auth, model string, now time.Time) (bool, block
 		return true, blockReasonOther, next
 	}
 	return false, blockReasonNone, time.Time{}
+}
+
+func isAuthBlockedForModel(auth *Auth, model string, now time.Time) (bool, blockReason, time.Time) {
+	return IsAuthBlockedForModel(auth, model, now)
 }
 
 // ApplyTimeoutCooldown marks an auth's per-model state as unavailable due to a
