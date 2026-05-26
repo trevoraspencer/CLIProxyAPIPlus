@@ -416,3 +416,65 @@ func TestDeepSeekAssistantTurnHashIgnoresReasoningContent(t *testing.T) {
 		t.Fatalf("assistant turn hash should be non-empty and ignore reasoning_content")
 	}
 }
+
+func TestDeepSeekStreamCaptureReconstructsChoicesAndToolIndexes(t *testing.T) {
+	cache := newDeepSeekReasoningCache(time.Minute, 8)
+	identity := deepSeekCompatIdentity{Enabled: true, Provider: "deepseek", AuthScope: "id:auth-a", Model: "deepseek-chat"}
+	capture := newDeepSeekStreamCapture(cache, identity)
+
+	lines := [][]byte{
+		[]byte(`: keepalive`),
+		[]byte(`event: completion`),
+		[]byte(`data: {"id":"chunk-1","choices":[{"index":0,"delta":{"reasoning_content":"choice0-","tool_calls":[{"index":1,"id":"call-b","type":"function","function":{"name":"wr","arguments":"arg-b-"}},{"index":0,"id":"call-a","type":"function","function":{"name":"ed","arguments":"arg-a-"}}]}},{"index":1,"delta":{"reasoning_content":"choice1-","tool_calls":[{"index":0,"id":"call-c","type":"function","function":{"name":"re","arguments":"arg-c-"}}]}}]}`),
+		[]byte(`data: {"choices":[{"index":0,"delta":{"reasoning_content":"reason","content":"visible","tool_calls":[{"index":1,"function":{"name":"ite","arguments":"done"}},{"index":0,"function":{"name":"it","arguments":"done"}}]}},{"index":1,"delta":{"reasoning_content":"reason","tool_calls":[{"index":0,"function":{"name":"ad","arguments":"done"}}]}}]}`),
+		[]byte(`data: {"choices":[],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`),
+		[]byte(`data: [DONE]`),
+	}
+	for _, line := range lines {
+		capture.ObserveSSELine(line)
+	}
+
+	if got, ok := cache.Get(identity, deepSeekReasoningTurn{ToolCallIDs: []string{"call-a", "call-b"}}); !ok || got != "choice0-reason" {
+		t.Fatalf("choice 0 cache lookup = %q, %v; want choice0-reason", got, ok)
+	}
+	if got, ok := cache.Get(identity, deepSeekReasoningTurn{ToolCallIDs: []string{"call-c"}}); !ok || got != "choice1-reason" {
+		t.Fatalf("choice 1 cache lookup = %q, %v; want choice1-reason", got, ok)
+	}
+}
+
+func TestDeepSeekStreamCaptureIgnoresNoiseAndRejectsIncompleteOrMalformed(t *testing.T) {
+	identity := deepSeekCompatIdentity{Enabled: true, Provider: "deepseek", AuthScope: "id:auth-a", Model: "deepseek-chat"}
+
+	incompleteCache := newDeepSeekReasoningCache(time.Minute, 8)
+	incomplete := newDeepSeekStreamCapture(incompleteCache, identity)
+	incomplete.ObserveSSELine([]byte(`data: {"choices":[{"index":0,"delta":{"reasoning_content":"synthetic","tool_calls":[{"index":0,"id":"call-incomplete","function":{"arguments":"{}"}}]}}]}`))
+	incomplete.Commit()
+	if got := incompleteCache.Len(); got != 0 {
+		t.Fatalf("incomplete tool call populated cache, Len=%d", got)
+	}
+
+	malformedCache := newDeepSeekReasoningCache(time.Minute, 8)
+	malformed := newDeepSeekStreamCapture(malformedCache, identity)
+	malformed.ObserveSSELine([]byte(`data: {"choices":[{"index":0,"delta":{"reasoning_content":"synthetic","tool_calls":[{"index":0,"id":"call-malformed","function":{"name":"edit","arguments":"{}"}}]}}]}`))
+	malformed.ObserveSSELine([]byte(`data: {"choices":[`))
+	malformed.ObserveSSELine([]byte(`data: [DONE]`))
+	if got := malformedCache.Len(); got != 0 {
+		t.Fatalf("malformed stream populated cache, Len=%d", got)
+	}
+
+	nonStringReasoningCache := newDeepSeekReasoningCache(time.Minute, 8)
+	nonStringReasoning := newDeepSeekStreamCapture(nonStringReasoningCache, identity)
+	nonStringReasoning.ObserveSSELine([]byte(`data: {"choices":[{"index":0,"delta":{"reasoning_content":["not-string"],"tool_calls":[{"index":0,"id":"call-non-string","function":{"name":"edit","arguments":"{}"}}]}}]}`))
+	nonStringReasoning.Commit()
+	if got := nonStringReasoningCache.Len(); got != 0 {
+		t.Fatalf("non-string reasoning populated cache, Len=%d", got)
+	}
+
+	nonDeepSeekCache := newDeepSeekReasoningCache(time.Minute, 8)
+	nonDeepSeek := newDeepSeekStreamCapture(nonDeepSeekCache, deepSeekCompatIdentity{Enabled: false, Provider: "openrouter", AuthScope: "id:auth-a", Model: "deepseek-chat"})
+	nonDeepSeek.ObserveSSELine([]byte(`data: {"choices":[{"index":0,"delta":{"reasoning_content":"synthetic","tool_calls":[{"index":0,"id":"call-1","function":{"name":"edit","arguments":"{}"}}]}}]}`))
+	nonDeepSeek.Commit()
+	if got := nonDeepSeekCache.Len(); got != 0 {
+		t.Fatalf("non-DeepSeek stream populated cache, Len=%d", got)
+	}
+}

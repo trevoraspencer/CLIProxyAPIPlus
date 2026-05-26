@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -136,6 +137,25 @@ type deepSeekReasoningTurn struct {
 	Reasoning         string
 	ToolCallIDs       []string
 	AssistantTurnHash string
+}
+
+type deepSeekStreamCapture struct {
+	cache    *deepSeekReasoningCache
+	identity deepSeekCompatIdentity
+	choices  map[int]*deepSeekStreamChoiceCapture
+	aborted  bool
+}
+
+type deepSeekStreamChoiceCapture struct {
+	reasoning strings.Builder
+	content   strings.Builder
+	tools     map[int]*deepSeekStreamToolCapture
+}
+
+type deepSeekStreamToolCapture struct {
+	id        strings.Builder
+	name      strings.Builder
+	arguments strings.Builder
 }
 
 type deepSeekReasoningCacheKey struct {
@@ -421,6 +441,169 @@ func deepSeekCaptureNonStreamResponse(cache *deepSeekReasoningCache, identity de
 		}
 		return true
 	})
+}
+
+func newDeepSeekStreamCapture(cache *deepSeekReasoningCache, identity deepSeekCompatIdentity) *deepSeekStreamCapture {
+	if cache == nil || !identity.Enabled {
+		return nil
+	}
+	return &deepSeekStreamCapture{
+		cache:    cache,
+		identity: identity,
+		choices:  make(map[int]*deepSeekStreamChoiceCapture),
+	}
+}
+
+func (c *deepSeekStreamCapture) ObserveSSELine(line []byte) {
+	if c == nil || c.aborted {
+		return
+	}
+	trimmed := bytes.TrimSpace(line)
+	if len(trimmed) == 0 || !bytes.HasPrefix(trimmed, []byte("data:")) {
+		return
+	}
+	payload := strings.TrimSpace(string(trimmed[len("data:"):]))
+	if payload == "[DONE]" {
+		c.Commit()
+		return
+	}
+	if !json.Valid([]byte(payload)) {
+		c.aborted = true
+		return
+	}
+	choices := gjson.Get(payload, "choices")
+	if !choices.IsArray() {
+		return
+	}
+	choices.ForEach(func(_, choice gjson.Result) bool {
+		if c.aborted {
+			return false
+		}
+		indexResult := gjson.Get(choice.Raw, "index")
+		if !indexResult.Exists() {
+			return true
+		}
+		choiceIndex := int(indexResult.Int())
+		state := c.choice(choiceIndex)
+		reasoning := gjson.Get(choice.Raw, "delta.reasoning_content")
+		if reasoning.Exists() && reasoning.Type != gjson.String {
+			c.aborted = true
+			return false
+		}
+		if reasoning.Exists() {
+			state.reasoning.WriteString(reasoning.String())
+		}
+		content := gjson.Get(choice.Raw, "delta.content")
+		if content.Exists() && content.Type == gjson.String {
+			state.content.WriteString(content.String())
+		}
+		toolCalls := gjson.Get(choice.Raw, "delta.tool_calls")
+		if toolCalls.IsArray() {
+			toolCalls.ForEach(func(_, toolCall gjson.Result) bool {
+				if c.aborted {
+					return false
+				}
+				toolIndexResult := gjson.Get(toolCall.Raw, "index")
+				if !toolIndexResult.Exists() {
+					return true
+				}
+				tool := state.tool(int(toolIndexResult.Int()))
+				if id := gjson.Get(toolCall.Raw, "id"); id.Exists() && id.Type == gjson.String {
+					tool.id.WriteString(id.String())
+				}
+				if name := gjson.Get(toolCall.Raw, "function.name"); name.Exists() && name.Type == gjson.String {
+					tool.name.WriteString(name.String())
+				}
+				if args := gjson.Get(toolCall.Raw, "function.arguments"); args.Exists() && args.Type == gjson.String {
+					tool.arguments.WriteString(args.String())
+				}
+				return true
+			})
+		}
+		return true
+	})
+}
+
+func (c *deepSeekStreamCapture) Abort() {
+	if c != nil {
+		c.aborted = true
+	}
+}
+
+func (c *deepSeekStreamCapture) Commit() {
+	if c == nil || c.aborted {
+		return
+	}
+	for _, choice := range c.choices {
+		turn, ok := choice.turn()
+		if !ok {
+			continue
+		}
+		c.cache.Put(c.identity, turn)
+	}
+}
+
+func (c *deepSeekStreamCapture) choice(index int) *deepSeekStreamChoiceCapture {
+	state := c.choices[index]
+	if state == nil {
+		state = &deepSeekStreamChoiceCapture{tools: make(map[int]*deepSeekStreamToolCapture)}
+		c.choices[index] = state
+	}
+	return state
+}
+
+func (c *deepSeekStreamChoiceCapture) tool(index int) *deepSeekStreamToolCapture {
+	tool := c.tools[index]
+	if tool == nil {
+		tool = &deepSeekStreamToolCapture{}
+		c.tools[index] = tool
+	}
+	return tool
+}
+
+func (c *deepSeekStreamChoiceCapture) turn() (deepSeekReasoningTurn, bool) {
+	if c == nil || strings.TrimSpace(c.reasoning.String()) == "" || len(c.tools) == 0 {
+		return deepSeekReasoningTurn{}, false
+	}
+	indexes := make([]int, 0, len(c.tools))
+	for index := range c.tools {
+		indexes = append(indexes, index)
+	}
+	sort.Ints(indexes)
+	ids := make([]string, 0, len(indexes))
+	toolCalls := make([]map[string]any, 0, len(indexes))
+	for _, index := range indexes {
+		tool := c.tools[index]
+		id := strings.TrimSpace(tool.id.String())
+		name := strings.TrimSpace(tool.name.String())
+		if id == "" || name == "" {
+			return deepSeekReasoningTurn{}, false
+		}
+		ids = append(ids, id)
+		toolCalls = append(toolCalls, map[string]any{
+			"id":   id,
+			"type": "function",
+			"function": map[string]any{
+				"name":      name,
+				"arguments": tool.arguments.String(),
+			},
+		})
+	}
+	msg := map[string]any{
+		"role":              "assistant",
+		"content":           c.content.String(),
+		"reasoning_content": c.reasoning.String(),
+		"tool_calls":        toolCalls,
+	}
+	raw, err := json.Marshal(msg)
+	if err != nil {
+		return deepSeekReasoningTurn{}, false
+	}
+	return deepSeekReasoningTurn{
+		Reasoning:         c.reasoning.String(),
+		ToolCallIDs:       ids,
+		AssistantTurnHash: deepSeekAssistantTurnHash(raw),
+	}, true
 }
 
 func deepSeekAssistantTurnHash(raw []byte) string {

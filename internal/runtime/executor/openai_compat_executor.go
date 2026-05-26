@@ -328,6 +328,12 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 	// Request usage data in the final streaming chunk so that token statistics
 	// are captured even when the upstream is an OpenAI-compatible provider.
 	translated, _ = sjson.SetBytes(translated, "stream_options.include_usage", true)
+	finalModel := strings.TrimSpace(gjson.GetBytes(translated, "model").String())
+	if finalModel == "" {
+		finalModel = baseModel
+	}
+	deepSeekIdentity := newDeepSeekCompatIdentity(e.Identifier(), auth, e.resolveCompatConfig(auth), baseURL, finalModel, opts)
+	translated = deepSeekPatchRequestPayload(defaultDeepSeekReasoningCache, deepSeekIdentity, translated)
 
 	url := strings.TrimSuffix(baseURL, "/") + "/chat/completions"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(translated))
@@ -392,6 +398,7 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 		scanner := bufio.NewScanner(httpResp.Body)
 		scanner.Buffer(nil, 52_428_800) // 50MB
 		var param any
+		deepSeekCapture := newDeepSeekStreamCapture(defaultDeepSeekReasoningCache, deepSeekIdentity)
 		for scanner.Scan() {
 			line := scanner.Bytes()
 			helps.AppendAPIResponseChunk(ctx, e.cfg, line)
@@ -409,6 +416,7 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 					continue
 				}
 				if bytes.HasPrefix(trimmedLine, []byte("{")) || bytes.HasPrefix(trimmedLine, []byte("[")) {
+					deepSeekCapture.Abort()
 					streamErr := statusErr{code: http.StatusBadGateway, msg: string(trimmedLine)}
 					helps.RecordAPIResponseError(ctx, e.cfg, streamErr)
 					reporter.PublishFailure(ctx, streamErr)
@@ -422,6 +430,7 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 			}
 
 			// OpenAI-compatible streams must use SSE data lines.
+			deepSeekCapture.ObserveSSELine(trimmedLine)
 			chunks := sdktranslator.TranslateStream(ctx, to, from, req.Model, opts.OriginalRequest, translated, bytes.Clone(trimmedLine), &param)
 			for i := range chunks {
 				select {
@@ -432,6 +441,7 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 			}
 		}
 		if errScan := scanner.Err(); errScan != nil {
+			deepSeekCapture.Abort()
 			helps.RecordAPIResponseError(ctx, e.cfg, errScan)
 			reporter.PublishFailure(ctx, errScan)
 			select {
@@ -439,6 +449,7 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 			case <-ctx.Done():
 			}
 		} else {
+			deepSeekCapture.Commit()
 			// In case the upstream close the stream without a terminal [DONE] marker.
 			// Feed a synthetic done marker through the translator so pending
 			// response.completed events are still emitted exactly once.

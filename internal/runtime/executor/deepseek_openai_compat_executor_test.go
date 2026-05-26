@@ -154,3 +154,168 @@ func TestDeepSeekOpenAICompatNonStreamCaptureIgnoresFailedAndMalformedResponses(
 		t.Fatalf("malformed response populated cache, Len=%d", got)
 	}
 }
+
+func TestDeepSeekOpenAICompatStreamCaptureThenPatchDroidReplay(t *testing.T) {
+	oldCache := defaultDeepSeekReasoningCache
+	defaultDeepSeekReasoningCache = newDeepSeekReasoningCache(time.Minute, 16)
+	t.Cleanup(func() { defaultDeepSeekReasoningCache = oldCache })
+
+	var mu sync.Mutex
+	var upstreamBodies [][]byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		upstreamBodies = append(upstreamBodies, append([]byte(nil), body...))
+		attempt := len(upstreamBodies)
+		mu.Unlock()
+		if attempt == 1 {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte(": keepalive\n\nevent: completion\nid: 1\nretry: 1000\n"))
+			_, _ = w.Write([]byte(`data: {"id":"chatcmpl_stream_1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"synthetic ","tool_calls":[{"index":0,"id":"call-stream-1","type":"function","function":{"name":"ed","arguments":"arg-"}}]},"finish_reason":null}]}` + "\n"))
+			_, _ = w.Write([]byte(`data: {"id":"chatcmpl_stream_1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"reasoning_content":"stream reasoning","content":"visible","tool_calls":[{"index":0,"function":{"name":"it","arguments":"done"}}]},"finish_reason":null}]}` + "\n"))
+			_, _ = w.Write([]byte(`data: {"id":"chatcmpl_stream_1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}` + "\n"))
+			_, _ = w.Write([]byte(`data: {"id":"chatcmpl_stream_1","object":"chat.completion.chunk","choices":[],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}` + "\n"))
+			_, _ = w.Write([]byte("data: [DONE]\n"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if got := gjson.GetBytes(body, "messages.1.reasoning_content").String(); got != "synthetic stream reasoning" {
+			http.Error(w, "missing patched stream reasoning", http.StatusBadRequest)
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"chatcmpl_2","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"done"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`))
+	}))
+	defer server.Close()
+
+	executor := NewOpenAICompatExecutor("openai-compatibility", &config.Config{
+		OpenAICompatibility: []config.OpenAICompatibility{{Name: "deepseek", BaseURL: server.URL + "/v1"}},
+	})
+	auth := &cliproxyauth.Auth{ID: "auth-stream", Provider: "openai-compatibility", Attributes: map[string]string{
+		"compat_name": "deepseek",
+		"base_url":    server.URL + "/v1",
+		"api_key":     "synthetic-key",
+	}}
+	opts := cliproxyexecutor.Options{
+		SourceFormat: sdktranslator.FromString("openai"),
+		Stream:       true,
+		Metadata:     map[string]any{cliproxyexecutor.ExecutionSessionMetadataKey: "session-stream"},
+	}
+	streamPayload := []byte(`{"model":"deepseek-chat","messages":[{"role":"user","content":"edit file"}],"stream":true}`)
+	result, err := executor.ExecuteStream(context.Background(), auth, cliproxyexecutor.Request{Model: "deepseek-chat", Payload: streamPayload}, opts)
+	if err != nil {
+		t.Fatalf("ExecuteStream error: %v", err)
+	}
+	var emitted strings.Builder
+	for chunk := range result.Chunks {
+		if chunk.Err != nil {
+			t.Fatalf("unexpected stream error: %v", chunk.Err)
+		}
+		emitted.Write(chunk.Payload)
+	}
+	if !strings.Contains(emitted.String(), "synthetic ") || !strings.Contains(emitted.String(), "stream reasoning") || !strings.Contains(emitted.String(), `"usage":{"prompt_tokens":1`) {
+		t.Fatalf("stream output did not preserve upstream chunks: %s", emitted.String())
+	}
+
+	replayPayload := []byte(`{"model":"deepseek-chat","messages":[{"role":"user","content":"edit file"},{"role":"assistant","content":"visible","tool_calls":[{"id":"call-stream-1","type":"function","function":{"name":"edit","arguments":"arg-done"}}]},{"role":"tool","tool_call_id":"call-stream-1","content":"ok"},{"role":"user","content":"continue"}]}`)
+	if _, err := executor.Execute(context.Background(), auth, cliproxyexecutor.Request{Model: "deepseek-chat", Payload: replayPayload}, cliproxyexecutor.Options{
+		SourceFormat: sdktranslator.FromString("openai"),
+		Metadata:     map[string]any{cliproxyexecutor.ExecutionSessionMetadataKey: "session-stream"},
+	}); err != nil {
+		t.Fatalf("replay Execute error: %v", err)
+	}
+
+	mu.Lock()
+	if len(upstreamBodies) != 2 {
+		t.Fatalf("upstream request count = %d, want 2", len(upstreamBodies))
+	}
+	secondBody := append([]byte(nil), upstreamBodies[1]...)
+	mu.Unlock()
+	if got := gjson.GetBytes(secondBody, "messages.1.reasoning_content").String(); got != "synthetic stream reasoning" {
+		t.Fatalf("sent upstream reasoning = %q, want captured stream reasoning; body=%s", got, secondBody)
+	}
+}
+
+func TestDeepSeekOpenAICompatStreamCaptureObservationOnlyAndErrorsDoNotCommit(t *testing.T) {
+	oldCache := defaultDeepSeekReasoningCache
+	defaultDeepSeekReasoningCache = newDeepSeekReasoningCache(time.Minute, 16)
+	t.Cleanup(func() { defaultDeepSeekReasoningCache = oldCache })
+
+	sse := []byte(`data: {"id":"chatcmpl_stream_1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"reasoning_content":"synthetic","tool_calls":[{"index":0,"id":"call-observe","function":{"name":"edit","arguments":"{}"}}]},"finish_reason":null}]}` + "\n" +
+		`data: {"id":"chatcmpl_stream_1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}` + "\n")
+
+	run := func(t *testing.T, provider string, auth *cliproxyauth.Auth) string {
+		t.Helper()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write(sse)
+		}))
+		defer server.Close()
+		auth.Attributes["base_url"] = server.URL + "/v1"
+		executor := NewOpenAICompatExecutor(provider, &config.Config{
+			OpenAICompatibility: []config.OpenAICompatibility{{Name: "deepseek", BaseURL: server.URL + "/v1"}},
+		})
+		result, err := executor.ExecuteStream(context.Background(), auth, cliproxyexecutor.Request{
+			Model:   "deepseek-chat",
+			Payload: []byte(`{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}],"stream":true}`),
+		}, cliproxyexecutor.Options{SourceFormat: sdktranslator.FromString("openai"), Stream: true})
+		if err != nil {
+			t.Fatalf("ExecuteStream error: %v", err)
+		}
+		var got strings.Builder
+		for chunk := range result.Chunks {
+			if chunk.Err != nil {
+				t.Fatalf("unexpected stream error: %v", chunk.Err)
+			}
+			got.Write(chunk.Payload)
+		}
+		return got.String()
+	}
+
+	deepSeekOut := run(t, "openai-compatibility", &cliproxyauth.Auth{ID: "auth-a", Provider: "openai-compatibility", Attributes: map[string]string{
+		"compat_name": "deepseek",
+		"api_key":     "synthetic-key",
+	}})
+	nonDeepSeekOut := run(t, "openai-compatibility", &cliproxyauth.Auth{ID: "auth-b", Provider: "openai-compatibility", Attributes: map[string]string{
+		"compat_name": "openrouter",
+		"api_key":     "synthetic-key",
+	}})
+	if deepSeekOut != nonDeepSeekOut {
+		t.Fatalf("capture changed emitted stream chunks\nDeepSeek: %s\nNonDeepSeek: %s", deepSeekOut, nonDeepSeekOut)
+	}
+	if !strings.Contains(deepSeekOut, "call-observe") {
+		t.Fatalf("clean EOF stream output missing upstream tool call chunk: %s", deepSeekOut)
+	}
+
+	defaultDeepSeekReasoningCache = newDeepSeekReasoningCache(time.Minute, 16)
+	errorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write(sse)
+		_, _ = w.Write([]byte(`{"error":{"message":"upstream failed"}}` + "\n"))
+	}))
+	defer errorServer.Close()
+	executor := NewOpenAICompatExecutor("deepseek", &config.Config{})
+	auth := &cliproxyauth.Auth{ID: "auth-error", Provider: "deepseek", Attributes: map[string]string{
+		"base_url": errorServer.URL + "/v1",
+		"api_key":  "synthetic-key",
+	}}
+	result, err := executor.ExecuteStream(context.Background(), auth, cliproxyexecutor.Request{
+		Model:   "deepseek-chat",
+		Payload: []byte(`{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}],"stream":true}`),
+	}, cliproxyexecutor.Options{SourceFormat: sdktranslator.FromString("openai"), Stream: true})
+	if err != nil {
+		t.Fatalf("ExecuteStream error: %v", err)
+	}
+	var gotErr error
+	for chunk := range result.Chunks {
+		if chunk.Err != nil {
+			gotErr = chunk.Err
+			break
+		}
+	}
+	if gotErr == nil || !strings.Contains(gotErr.Error(), "upstream failed") {
+		t.Fatalf("stream error = %v, want upstream failed", gotErr)
+	}
+	if got := defaultDeepSeekReasoningCache.Len(); got != 0 {
+		t.Fatalf("error stream populated cache, Len=%d", got)
+	}
+}
