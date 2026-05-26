@@ -1,0 +1,15 @@
+{
+  "featureId": "repair-codex-timeout-manager-semantics",
+  "reviewedAt": "2026-05-26T06:01:03Z",
+  "commitId": "c5b7d27b22373dab4ce3ca2bf871b4732eda17f7",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix adequately addresses the prior Codex timeout Manager-semantics blockers. Manager timeout handling now reapplies cooldown to the stored auth state after MarkResult and refreshes the scheduler, ApplyTimeoutCooldown overwrites NextRetryAfter even when MarkResult already marked the model unavailable, zero cooldown results in no NextRetryAfter, and zero retries returns the first timeout without failover. The added Manager-level mocked-executor tests cover the production ordering and zero-disable behavior, config tests cover default and explicit-zero parsing, and the diff stays scoped to Codex auth/config/executor code without DeepSeek executor changes.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/repair-codex-timeout-cooldown-compile.json",
+  "summary": "Reviewed the fix feature record, handoff, transcript skeleton, prior failed review, worker skill, shared-state files, and commit c5b7d27b diff. The implementation addresses the prior blocking issues and should pass scrutiny."
+}
