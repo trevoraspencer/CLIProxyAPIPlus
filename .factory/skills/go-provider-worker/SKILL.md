@@ -21,6 +21,14 @@ NOTE: Startup and cleanup are handled by `worker-base`. This skill defines the W
 
 Use for Go implementation and test features touching provider config, auth synthesis, registry, executors, thinking, SDK routing, or model aliases.
 
+
+## Mission-Specific Quality Requirements
+
+- Before handoff, verify and record that the feature commit is an ancestor of the active branch (`git merge-base --is-ancestor <commit> HEAD`) unless no new commit was intentionally created; if no new commit exists, state that explicitly and do not report an unrelated previous HEAD as the feature commit.
+- For changes touching `sdk/cliproxy/auth` Manager execution loops, cooldowns, retry/failover semantics, or selector interactions, add Manager-level integration tests in addition to helper/config tests.
+- For final-validation/evidence features, keep `.factory/` artifacts scoped to the current milestone. Do not commit or claim unrelated historical `.factory/docs` or `.factory/validation` artifacts as part of the current feature.
+- When reviewing DeepSeek executor helpers, enforce capture eligibility strictly: assistant-role messages only for non-stream capture, failed stream state for SSE error objects, and no cache commit for incomplete reconstructed tool calls.
+
 ## Verification Requirements
 
 - Add tests before implementation for behavior changes.
