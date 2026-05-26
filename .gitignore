@@ -56,5 +56,10 @@ _bmad-output/*
 .DS_Store
 ._*
 .gocache/
-# Factory mission artifacts
-.factory/
+# Factory generated/historical outputs
+.factory/docs/
+.factory/research/
+.factory/validation/
+.factory/skills/config-docs-worker/
+.factory/skills/docs-cleanup-worker/
+.factory/skills/go-provider-worker/

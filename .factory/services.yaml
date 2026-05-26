@@ -1,0 +1,12 @@
+commands:
+  install: go mod download
+  format: gofmt -w
+  diff_check: git diff --check
+  test_auth_alias: go test ./sdk/cliproxy/auth -run 'TestFillFirstSelectorPick|TestSchedulerPick_FillFirst|TestSchedulerPick_PromotesExpiredCooldownBeforePick|TestManager_SchedulerTracksMarkResultCooldownAndRecovery|TestSessionAffinitySelector|OpenAICompatAliasPool|ResolveModelAliasPoolFromConfigModels|ModelAliasSession|APIKeyModelAlias|OAuthModelAlias|ResolveOAuthUpstreamModel|LookupAPIKeyUpstreamModel|RequestedModelAlias' -count=1
+  test_executor: go test ./internal/runtime/executor -run 'TestDeepSeek|TestOpenAICompat' -count=1
+  test_model_listing: go test ./internal/watcher/synthesizer ./sdk/cliproxy ./internal/registry ./internal/api ./sdk/cliproxy/auth -run 'OpenAICompat|DeepSeek|Model' -count=1
+  test: go test ./... -p 2 -parallel=4 -count=1 -timeout 10m
+  build: go build -o test-output ./cmd/server && rm test-output
+  probe_local_models_unauth: "curl -sS -o /dev/null -w 'HTTP_STATUS:%{http_code}\\n' --max-time 5 http://127.0.0.1:8318/v1/models"
+
+services: {}
