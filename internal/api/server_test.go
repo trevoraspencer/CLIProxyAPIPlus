@@ -390,6 +390,67 @@ func TestModelsWithClientVersionReturnsCodexCatalog(t *testing.T) {
 	}
 }
 
+func TestDeepSeekModelListingAPIFromRegistry(t *testing.T) {
+	modelRegistry := registry.GetGlobalRegistry()
+	clientID := "test-deepseek-openai-compat-model-listing-api"
+	modelRegistry.RegisterClient(clientID, "deepseek", []*registry.ModelInfo{
+		{
+			ID:      "deepseek-v4",
+			Object:  "model",
+			Created: 1776902400,
+			OwnedBy: "deepseek",
+			Type:    "openai-compatibility",
+		},
+	})
+	t.Cleanup(func() {
+		modelRegistry.UnregisterClient(clientID)
+	})
+
+	server := newTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+
+	rr := httptest.NewRecorder()
+	server.engine.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp struct {
+		Object string `json:"object"`
+		Data   []struct {
+			ID      string `json:"id"`
+			Object  string `json:"object"`
+			OwnedBy string `json:"owned_by"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response JSON: %v; body=%s", err, rr.Body.String())
+	}
+	if resp.Object != "list" {
+		t.Fatalf("object = %q, want list", resp.Object)
+	}
+
+	var matches int
+	for _, model := range resp.Data {
+		if model.ID != "deepseek-v4" {
+			continue
+		}
+		matches++
+		if model.Object != "model" {
+			t.Fatalf("deepseek-v4 object = %q, want model", model.Object)
+		}
+		if model.OwnedBy != "deepseek" {
+			t.Fatalf("deepseek-v4 owned_by = %q, want deepseek", model.OwnedBy)
+		}
+	}
+	if matches != 1 {
+		t.Fatalf("expected exactly one deepseek-v4 model in /v1/models response, got %d in %+v", matches, resp.Data)
+	}
+}
+
 func assertCodexSupportedReasoningLevels(t *testing.T, model map[string]any, want []string) {
 	t.Helper()
 

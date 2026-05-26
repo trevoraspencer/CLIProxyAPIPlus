@@ -1,0 +1,215 @@
+{
+  "groupId": "deepseek-executor",
+  "surface": "go-test-api-cli",
+  "status": "pass",
+  "assertions": [
+    {
+      "id": "VAL-DS-001",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; test list contains DeepSeek executor tests plus OpenAI-compatible compact/image/stream regression tests, and code review shows the shim is wired only in OpenAI-compatible chat completion paths.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-002",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; TestDeepSeekDetectConservativeProviderAndBaseURL covers provider/config identity, allowed base URL, and non-DeepSeek negative detection.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-003",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; TestDeepSeekDetectBaseURLHostAllowlistRejectsLookalikes covers api.deepseek.com, trailing-dot/port normalization, credential rejection, path/query/fragment rejection, IP/malformed rejection, and lookalike hosts.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-004",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; TestDeepSeekNonStreamExecutorDoesNotPatchNonDeepSeekModelNameOnly and stream non-DeepSeek pass-through prove model-name-only DeepSeek strings do not activate replay.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-005",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; non-DeepSeek executor pass-through tests prepopulate the cache and assert no reasoning_content insertion or extra capture.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-006",
+      "status": "pass",
+      "evidence": "cmd1 passed; code review shows patching after translation/thinking/payload config and before RecordAPIRequest/http send, with executor httptest bodies confirming patched upstream payload.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-007",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; TestDeepSeekPatchEligibleAssistantToolCallsOnly covers assistant+tool_call eligibility, explicit empty reasoning preservation, and non-assistant/no-tool no-patch cases.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-008",
+      "status": "pass",
+      "evidence": "cmd1 passed; patch test preserves unknown/extra fields and implementation only adds missing reasoning_content to the target assistant message.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-009",
+      "status": "pass",
+      "evidence": "cmd1 passed; patch/capture tests preserve existing reasoning_content including empty string and ignore empty captured reasoning.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-010",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; TestDeepSeekPatchCacheMissUnchanged proves cache miss payloads are forwarded unchanged without invented reasoning.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-011",
+      "status": "pass",
+      "evidence": "cmd1/cmd2 passed; key/cache tests cover order-independent tool-call IDs, scoped auth/session key material, TTL/cache bounds, and race-safe concurrent store/lookup.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-012",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; code review shows cache scope uses final translated payload model after payload config, and OpenAICompat payload override regression remains listed/passing.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-013",
+      "status": "pass",
+      "evidence": "cmd2 passed; race-enabled cache/concurrent tests passed, and TestDeepSeekCacheKeyAndCacheTTLBoundConcurrent validates finite max size and TTL expiry.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-014",
+      "status": "pass",
+      "evidence": "cmd1/cmd2 plus code review: cache keys contain provider/auth/model/session/tool-call or turn hash and entries store replay-required reasoning plus timestamp only; no raw headers, keys, auth JSON, or full bodies.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-015",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; TestDeepSeekNonStreamCaptureStoresEligibleReasoningOnly and non-stream executor capture/replay verify only assistant tool-call reasoning is cached.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-016",
+      "status": "pass",
+      "evidence": "cmd1 passed; non-stream malformed/ineligible tests cover empty/non-string reasoning, invalid JSON, invalid tool calls, non-assistant roles, and deterministic no-cache behavior.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-017",
+      "status": "pass",
+      "evidence": "cmd1 passed; non-stream executor test asserts upstream response payload is preserved while capture observes it after response read.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-018",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; TestDeepSeekStreamCaptureReconstructsFragmentsAndReplayPatchesStream uses SSE fragments through httptest and confirms replay patching.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-019",
+      "status": "pass",
+      "evidence": "cmd1 passed; stream capture implementation/test reconstructs tool calls by choice/tool-call index and rejects incomplete tool-call fragments.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-020",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; stream tests cover keepalive/event noise, usage-only chunks, [DONE], clean EOF commit, malformed data, and upstream SSE error no-commit behavior.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-021",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; stream code clones observed data for capture then passes it to translation, and clean EOF still feeds synthetic [DONE] to translator.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-022",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; DeepSeek stream error/no-commit tests and OpenAI-compatible stream regressions confirm output/error behavior remains unchanged.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-023",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; OpenAI-compatible compact/image/payload/stream regressions and non-DeepSeek pass-through tests confirm non-DeepSeek providers remain unchanged.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-024",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; TestDeepSeekCountTokensDoesNotPatchOrCache and CountTokens code path show token counting does not use capture/cache/patch logic.",
+      "reason": null
+    },
+    {
+      "id": "VAL-DS-025",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; TestDeepSeekDefaultLogsDoNotExposeReasoningOrSecrets verifies default logs omit sentinel reasoning/secret values.",
+      "reason": null
+    },
+    {
+      "id": "VAL-CROSS-003",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; reviewed tests use synthetic JSON/SSE fixtures and httptest.Server only, with no live DeepSeek calls or personal config/proxy authentication; handoff states live smoke is user-run/deferred.",
+      "reason": null
+    },
+    {
+      "id": "VAL-CROSS-005",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; non-stream and streaming Droid-shaped executor tests capture reasoning on first call and patch matching assistant tool-call history on the follow-up call.",
+      "reason": null
+    },
+    {
+      "id": "VAL-CROSS-006",
+      "status": "pass",
+      "evidence": "cmd1/cmd2/cmd3 passed; scoped cache tests and non-DeepSeek/prepopulated-cache executor tests show replay isolation across auth/provider/model-name-only/tool-call mismatches.",
+      "reason": null
+    },
+    {
+      "id": "VAL-CROSS-007",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 plus code review: the same translated body is patched before RecordAPIRequest and http.NewRequest, upstream bodies are captured by httptest, and default log sentinel coverage passes.",
+      "reason": null
+    },
+    {
+      "id": "VAL-CROSS-008",
+      "status": "pass",
+      "evidence": "cmd1/cmd3 passed; paired DeepSeek capture/replay tests patch configured DeepSeek while non-DeepSeek OpenRouter/custom-style fixtures with DeepSeek-looking models remain unpatched.",
+      "reason": null
+    }
+  ],
+  "commands": [
+    {
+      "command": "go test ./internal/runtime/executor -run 'TestDeepSeek|TestOpenAICompat' -count=1",
+      "exitCode": 0,
+      "observation": "Passed: ok github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor; DeepSeek and OpenAI-compatible executor regression tests completed. Transcript: mission evidence cmd1-test-executor.txt."
+    },
+    {
+      "command": "go test -race ./internal/runtime/executor -run 'TestDeepSeek.*Cache|TestDeepSeek.*Concurrent' -count=1",
+      "exitCode": 0,
+      "observation": "Passed under race detector: cache TTL/bounds/concurrency-focused DeepSeek tests completed. Transcript: mission evidence cmd2-test-executor-race.txt."
+    },
+    {
+      "command": "go test ./internal/runtime/executor -list 'DeepSeek|OpenAICompat'",
+      "exitCode": 0,
+      "observation": "Listed 17 TestDeepSeek... tests and 8 TestOpenAICompat... tests covering detection, allowlist, cache, non-stream/stream replay, non-DeepSeek pass-through, CountTokens, logs, compact/image/payload/stream regressions. Transcript: mission evidence cmd3-test-list.txt."
+    },
+    {
+      "command": "git diff --name-only HEAD",
+      "exitCode": 0,
+      "observation": "Output listed only .factory/library/user-testing.md before this flow report was written; no Go/source changes were present in the diff-name evidence. Transcript: mission evidence cmd4-git-diff-name-only.txt."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "toolsUsed": [
+    "go test",
+    "git"
+  ]
+}

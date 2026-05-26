@@ -1,0 +1,28 @@
+{
+  "featureId": "cleanup-final-validation-artifact-scope-and-rerun",
+  "reviewedAt": "2026-05-26T06:01:09Z",
+  "commitId": "e20ec6b4d0d226b8b51ea83cfb8971f421e40ec2",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The cleanup commit removes the unrelated .factory/docs and non-DeepSeek .factory/validation directories that caused the prior final-validation failure, updates the final handoff with a scope-correction section, keeps the current DeepSeek scrutiny artifacts available, and records the required targeted/full test and build evidence. However, it still leaves an unrelated Z.AI/OpenCode research artifact from the original over-scoped final-validation commit tracked in .factory/research while the final evidence claims retained .factory/research files are DeepSeek milestone handoff context.",
+    "issues": [
+      {
+        "file": ".factory/library/final-validation-smoke-handoff.md",
+        "line": 28,
+        "severity": "blocking",
+        "description": "The final evidence says retained `.factory/research/` files are mission infrastructure or DeepSeek milestone handoff context, but `.factory/research/provider-research.md` remains tracked from the original over-scoped b96b0550 commit and is a Z.AI/OpenCode research artifact (`provider-research.md` lines 3-15 mention Z.AI, VibeProxy, and OpenCode Zen/Go, with no DeepSeek content). This means unrelated Z.AI/OpenCode artifacts are still retained and effectively claimed as DeepSeek final-validation context, so the cleanup does not fully satisfy the required scope repair."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Final-validation scope guidance calls out unrelated `.factory/docs` and `.factory/validation` artifacts, but not other Factory artifact directories such as `.factory/research`; this narrower wording may have allowed an unrelated Z.AI/OpenCode research artifact to remain while being described as DeepSeek mission context.",
+      "evidence": "Mission AGENTS.md line 101 says not to commit or claim unrelated historical `.factory/docs` or `.factory/validation` artifacts. The cleanup evidence line 28 describes retained `.factory/research/` as mission infrastructure/DeepSeek context, while `.factory/research/provider-research.md` lines 3-15 are Z.AI/OpenCode research notes."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/final-validation-smoke-handoff-and-docs.json",
+  "summary": "Fail: the fix removes the prior unrelated docs/validation directories and includes rerun validator/build evidence, but it still retains and misclassifies an unrelated Z.AI/OpenCode `.factory/research` artifact from the over-scoped final-validation commit."
+}

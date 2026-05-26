@@ -1,0 +1,15 @@
+{
+  "featureId": "fix-deepseek-reasoning-capture-safety",
+  "reviewedAt": "2026-05-26T06:01:31Z",
+  "commitId": "1f05bd67a682e87dafe606863fc25ff7ceeb89d3",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Pass. The fix addresses the prior blocking capture-safety issues: non-stream capture now requires role == \"assistant\", non-empty reasoning_content, and complete tool calls before storing; streaming capture now marks SSE error objects as failed and only commits reconstructed tool calls when ID, function.name, and function.arguments fragments were observed. The OpenAI-compatible stream loop still observes before translation without mutating emitted chunks, still treats usage-only/no-choice chunks as safe, and still returns early without commit for non-SSE terminal JSON errors. The handoff and transcript evidence are meaningful: focused negative tests failed before implementation, then focused TestDeepSeek capture tests, all TestDeepSeek tests, race cache/concurrency tests, full go test ./..., git diff --check, build, clean status, and merge-base ancestry checks passed.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/implement-missing-deepseek-core-nonstream.json; .factory/validation/deepseek-droid-compat/scrutiny/reviews/deepseek-streaming-capture-replay.json; .factory/validation/deepseek-droid-compat/scrutiny/reviews/implement-missing-deepseek-stream-regressions.json",
+  "summary": "Pass: commit 1f05bd67 is present on the active pr/codex-hang-failover branch and adequately fixes the non-stream assistant/valid-tool-call eligibility gap plus the streaming SSE-error and incomplete-tool-call cache-commit gaps while preserving normal usage-only chunks and stream output behavior."
+}

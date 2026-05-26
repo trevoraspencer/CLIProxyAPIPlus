@@ -1,0 +1,21 @@
+{
+  "featureId": "cleanup-final-validation-research-artifact-scope",
+  "reviewedAt": "2026-05-26T06:13:20Z",
+  "commitId": "eb03e831dfbd86720a9cf002e71a44256c0b16b8",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix directly addresses the round-2 failure. Commit eb03e831 deletes `.factory/research/provider-research.md`, updates the final evidence to list that deletion, explains the deleted Z.AI/VibeProxy/OpenCode research is not DeepSeek context or current evidence, removes the prior retained `.factory/research/` claim, and states that no `.factory/research/` artifact is retained as DeepSeek evidence. Review of prior commit e20ec6b4 shows the exact prior misclassification; the new diff corrects it without production-code changes.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The go-provider-worker skill still narrows final-validation/evidence artifact-scope guidance to `.factory/docs` and `.factory/validation`, while mission AGENTS now correctly covers all Factory artifact directories. The worker followed the broader mission guidance, but the skill text could still encourage future omissions of `.factory/research`, `.factory/library`, or `.factory/skills`.",
+      "evidence": ".factory/skills/go-provider-worker/SKILL.md:29 mentions only `.factory/docs` and `.factory/validation`; mission AGENTS.md:104 broadens the rule to `.factory/docs`, `.factory/research`, `.factory/validation`, `.factory/library`, and `.factory/skills`; .factory/library/final-validation-smoke-handoff.md:21-31 now scopes/removes `.factory/research/provider-research.md`."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/cleanup-final-validation-artifact-scope-and-rerun.json",
+  "summary": "Pass: the fix adequately addresses the prior failure by removing the unrelated research artifact and updating final evidence so Factory artifact directories are scoped accurately; no blocking issues found."
+}

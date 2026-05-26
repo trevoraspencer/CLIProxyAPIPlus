@@ -1,0 +1,39 @@
+{
+  "featureId": "deepseek-nondeepseek-token-logging-regressions",
+  "reviewedAt": "2026-05-26T05:15:49Z",
+  "commitId": "4ccb7a3b5a40aaf70334a51f8ba2cf874b40bbfb",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The commit adds useful executor regression tests for non-DeepSeek pass-through, stream pass-through, token-count response isolation, and default log sentinels. However, the reviewed commit still leaves DeepSeek cache/patch logic wired through the shared Execute path for `/responses/compact`, and the token-count regression only exercises a non-DeepSeek provider, so the feature does not fully prove the required non-chat/token-count boundaries.",
+    "issues": [
+      {
+        "file": "internal/runtime/executor/openai_compat_executor.go",
+        "line": 134,
+        "severity": "blocking",
+        "description": "In the reviewed commit, `Execute` sets `endpoint = \"/responses/compact\"` for `opts.Alt == \"responses/compact\"`, but still constructs a DeepSeek identity and calls `deepSeekPatchRequestPayload` unconditionally before request logging/sending; non-stream capture is likewise called unconditionally at line 195. That means the DeepSeek shim/cache is not localized to the chat-completions path and can run for compact/non-chat traffic, violating the feature expectation and VAL-DS-001. The added regressions do not cover a DeepSeek compact request with a pre-populated cache; the existing compact test uses a normal non-DeepSeek fixture and only checks the usual input/messages shape."
+      },
+      {
+        "file": "internal/runtime/executor/deepseek_openai_compat_executor_test.go",
+        "line": 440,
+        "severity": "blocking",
+        "description": "`TestOpenAICompatCountTokensDoesNotUseDeepSeekCacheOrPatchPayload` creates an `openrouter`/non-DeepSeek auth and base URL, so it only proves token counting is isolated when DeepSeek detection is disabled. VAL-DS-024 requires token counting to remain unchanged for DeepSeek and non-DeepSeek OpenAI-compatible providers; this test would not fail if a future change invoked the reasoning cache only for a DeepSeek-enabled token-count request."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The reviewed feature's `skillName` is `go-compat-worker` and the transcript skeleton shows the worker invoked that skill, but the skill file is not present in repo shared state, so reviewers cannot compare the worker's procedure against the referenced skill.",
+      "evidence": "features.json: `skillName: go-compat-worker`; transcript skeleton starts with `Skill go-compat-worker`; reading `/Users/trevor/code/CLIProxyAPIPlus/.factory/skills/go-compat-worker/SKILL.md` returned ENOENT and a `/Users/trevor/.factory` glob found no `go-compat-worker/SKILL.md`."
+    },
+    {
+      "area": "knowledge",
+      "observation": "The shared library says DeepSeek replay belongs in the OpenAI-compatible executor path, but it does not capture the important implementation nuance that compact `/responses/compact` uses the same `Execute` method and therefore DeepSeek hooks must be explicitly gated to `/chat/completions`.",
+      "evidence": ".factory/library/architecture.md only says `DeepSeek reasoning replay belongs in internal/runtime/executor OpenAI-compatible executor path`; reviewed commit `internal/runtime/executor/openai_compat_executor.go:104-135` shows compact and chat share `Execute` before the DeepSeek patch call."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the regression commit is test-only and covers several important pass-through/logging cases, but it misses blocking coverage for DeepSeek compact/non-chat cache invocation and does not exercise DeepSeek-enabled CountTokens isolation."
+}

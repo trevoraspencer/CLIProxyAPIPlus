@@ -1,0 +1,171 @@
+{
+  "milestone": "deepseek-droid-compat",
+  "round": 2,
+  "status": "fail",
+  "generatedAt": "2026-05-26T06:03:42.436477+00:00",
+  "rerunReason": "Rerun after fixes for DeepSeek capture safety, model-listing coverage, Codex timeout Manager semantics, and final-validation artifact scope.",
+  "validatorsRun": {
+    "lint": {
+      "passed": true,
+      "command": "git diff --check",
+      "exitCode": 0,
+      "observation": "Completed with no whitespace or conflict-marker diagnostics."
+    },
+    "auth_package": {
+      "passed": true,
+      "command": "go test ./sdk/cliproxy/auth -count=1",
+      "exitCode": 0,
+      "observation": "Auth package tests passed: ok github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth."
+    },
+    "auth_alias": {
+      "passed": true,
+      "command": "go test ./sdk/cliproxy/auth -run 'TestFillFirstSelectorPick|TestSchedulerPick_FillFirst|TestSchedulerPick_PromotesExpiredCooldownBeforePick|TestManager_SchedulerTracksMarkResultCooldownAndRecovery|TestSessionAffinitySelector|OpenAICompatAliasPool|ResolveModelAliasPoolFromConfigModels|ModelAliasSession|APIKeyModelAlias|OAuthModelAlias|ResolveOAuthUpstreamModel|LookupAPIKeyUpstreamModel|RequestedModelAlias|TimeoutCooldown|CodexTimeout|CodexResponseHeaderTimeout' -count=1",
+      "exitCode": 0,
+      "observation": "Targeted selector, scheduler, session-affinity, alias, OpenAI-compatible alias-pool, and timeout/cooldown tests passed in sdk/cliproxy/auth."
+    },
+    "executor": {
+      "passed": true,
+      "command": "go test ./internal/runtime/executor -run 'TestDeepSeek|TestOpenAICompat' -count=1",
+      "exitCode": 0,
+      "observation": "Executor DeepSeek/OpenAI-compatible targeted tests passed."
+    },
+    "model_listing": {
+      "passed": true,
+      "command": "go test ./internal/watcher/synthesizer ./sdk/cliproxy ./internal/registry ./internal/api ./sdk/cliproxy/auth -run 'OpenAICompat|DeepSeek|Model' -count=1",
+      "exitCode": 0,
+      "observation": "Targeted config/model-listing/auth/API command passed across synthesizer, SDK, registry, API, and auth packages."
+    },
+    "executor_race": {
+      "passed": true,
+      "command": "go test -race ./internal/runtime/executor -run 'TestDeepSeek.*Cache|TestDeepSeek.*Concurrent' -count=1",
+      "exitCode": 0,
+      "observation": "Race-enabled DeepSeek cache/concurrency command passed."
+    },
+    "test": {
+      "passed": true,
+      "command": "go test ./... -p 2 -parallel=4 -count=1 -timeout 10m",
+      "exitCode": 0,
+      "observation": "Full repository tests passed with approved resource-aware concurrency across all packages."
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "go build -o test-output ./cmd/server && rm test-output",
+      "exitCode": 0,
+      "observation": "Server binary built successfully and the transient test-output artifact was removed."
+    },
+    "build_artifact_status": {
+      "passed": true,
+      "command": "git status --short -- test-output",
+      "exitCode": 0,
+      "observation": "No test-output artifact appeared in git status after the build command."
+    },
+    "executor_list": {
+      "passed": true,
+      "command": "go test ./internal/runtime/executor -list 'DeepSeek|OpenAICompat'",
+      "exitCode": 0,
+      "observation": "Listed concrete TestDeepSeek and TestOpenAICompat executor tests, including capture, replay, non-DeepSeek pass-through, CountTokens, logging, and stream cases."
+    },
+    "model_listing_list": {
+      "passed": true,
+      "command": "go test ./internal/watcher/synthesizer ./sdk/cliproxy ./internal/registry ./internal/api ./sdk/cliproxy/auth -list 'DeepSeek.*Model|Model.*DeepSeek|deepseek'",
+      "exitCode": 0,
+      "observation": "Listed DeepSeek model-listing tests in sdk/cliproxy and internal/api, including config/auth/registry, prefix, negative/removal, non-DeepSeek provider, and API JSON cases."
+    }
+  },
+  "reviewMode": "rerun-after-round-1-fixes",
+  "featuresReviewed": [
+    {
+      "fixFeatureId": "fix-deepseek-reasoning-capture-safety",
+      "addressesOriginalFailedFeatures": [
+        "implement-missing-deepseek-core-nonstream",
+        "deepseek-streaming-capture-replay",
+        "implement-missing-deepseek-stream-regressions"
+      ]
+    },
+    {
+      "fixFeatureId": "restore-deepseek-model-listing-coverage",
+      "addressesOriginalFailedFeatures": [
+        "config-driven-deepseek-model-listing"
+      ]
+    },
+    {
+      "fixFeatureId": "repair-codex-timeout-manager-semantics",
+      "addressesOriginalFailedFeatures": [
+        "repair-codex-timeout-cooldown-compile"
+      ]
+    },
+    {
+      "fixFeatureId": "cleanup-final-validation-artifact-scope-and-rerun",
+      "addressesOriginalFailedFeatures": [
+        "final-validation-smoke-handoff-and-docs"
+      ]
+    }
+  ],
+  "reviewsSummary": {
+    "total": 4,
+    "passed": 3,
+    "failed": 1,
+    "passedFeatures": [
+      "fix-deepseek-reasoning-capture-safety",
+      "restore-deepseek-model-listing-coverage",
+      "repair-codex-timeout-manager-semantics"
+    ],
+    "failedFeatures": [
+      "cleanup-final-validation-artifact-scope-and-rerun"
+    ],
+    "reviewReports": [
+      {
+        "featureId": "fix-deepseek-reasoning-capture-safety",
+        "status": "pass",
+        "commitId": "1f05bd67a682e87dafe606863fc25ff7ceeb89d3",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/fix-deepseek-reasoning-capture-safety.json",
+        "summary": "Pass: commit 1f05bd67 is present on the active pr/codex-hang-failover branch and adequately fixes the non-stream assistant/valid-tool-call eligibility gap plus the streaming SSE-error and incomplete-tool-call cache-commit gaps while preserving normal usage-only chunks and stream output behavior.",
+        "issuesCount": 0
+      },
+      {
+        "featureId": "restore-deepseek-model-listing-coverage",
+        "status": "pass",
+        "commitId": "63eb0bd9e305c87117a88ce94d64595ad6a51003",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/restore-deepseek-model-listing-coverage.json",
+        "summary": "Pass: the fix adequately addresses the prior blocker that current HEAD lacked DeepSeek-specific model-listing tests. Evidence reviewed includes sdk/cliproxy/deepseek_model_listing_test.go, internal/api/server_test.go, sdk/cliproxy/service.go, the handoff/transcript skeleton, and commit reachability showing 63eb0bd9 is an ancestor of HEAD.",
+        "issuesCount": 0
+      },
+      {
+        "featureId": "repair-codex-timeout-manager-semantics",
+        "status": "pass",
+        "commitId": "c5b7d27b22373dab4ce3ca2bf871b4732eda17f7",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/repair-codex-timeout-manager-semantics.json",
+        "summary": "Reviewed the fix feature record, handoff, transcript skeleton, prior failed review, worker skill, shared-state files, and commit c5b7d27b diff. The implementation addresses the prior blocking issues and should pass scrutiny.",
+        "issuesCount": 0
+      },
+      {
+        "featureId": "cleanup-final-validation-artifact-scope-and-rerun",
+        "status": "fail",
+        "commitId": "e20ec6b4d0d226b8b51ea83cfb8971f421e40ec2",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/cleanup-final-validation-artifact-scope-and-rerun.json",
+        "summary": "Fail: the fix removes the prior unrelated docs/validation directories and includes rerun validator/build evidence, but it still retains and misclassifies an unrelated Z.AI/OpenCode `.factory/research` artifact from the over-scoped final-validation commit.",
+        "issuesCount": 1
+      }
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "cleanup-final-validation-artifact-scope-and-rerun",
+      "severity": "blocking",
+      "description": "The final-validation scope cleanup still retains and misclassifies an unrelated .factory/research/provider-research.md artifact as DeepSeek mission context, even though that tracked file contains Z.AI, VibeProxy, and OpenCode Zen/Go research with no DeepSeek content.",
+      "evidence": "Review report cleanup-final-validation-artifact-scope-and-rerun.json flags .factory/library/final-validation-smoke-handoff.md line 28 and .factory/research/provider-research.md lines 3-15; direct inspection confirmed provider-research.md is tracked and contains unrelated Z.AI/VibeProxy/OpenCode research notes.",
+      "suggestedFix": "Remove or split the unrelated .factory/research/provider-research.md artifact from the current DeepSeek validation scope, or update final evidence so any retained research file is explicitly not claimed as DeepSeek context and is justified by current milestone relevance."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md / final-validation guidance",
+      "suggestion": "Broaden artifact-scope guidance to cover all unrelated Factory artifact directories, not only .factory/docs and non-DeepSeek .factory/validation, so workers do not retain unrelated .factory/research artifacts as milestone context.",
+      "evidence": "The cleanup review found .factory/research/provider-research.md was retained and described as DeepSeek mission context even though it contains Z.AI/OpenCode/VibeProxy notes from unrelated work.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/deepseek-droid-compat/scrutiny/synthesis.round1.json"
+}
