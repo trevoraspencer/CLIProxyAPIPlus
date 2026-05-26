@@ -779,23 +779,7 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 
 	// Unmarshal the YAML data into the Config struct.
 	var cfg Config
-	// Set defaults before unmarshal so that absent keys keep defaults.
-	cfg.Host = "" // Default empty: binds to all interfaces (IPv4 + IPv6)
-	cfg.LoggingToFile = false
-	cfg.LogsMaxTotalSizeMB = 0
-	cfg.ErrorLogsMaxFiles = 10
-	cfg.UsageStatisticsEnabled = false
-	cfg.RedisUsageQueueRetentionSeconds = 60
-	cfg.DisableCooling = false
-	cfg.DisableImageGeneration = DisableImageGenerationOff
-	cfg.CodexResponseHeaderTimeout = 30
-	cfg.CodexTimeoutRetries = 2
-	cfg.CodexTimeoutCooldownSeconds = 30
-	cfg.Pprof.Enable = false
-	cfg.Pprof.Addr = DefaultPprofAddr
-	cfg.AmpCode.RestrictManagementToLocalhost = false // Default to false: API key auth is sufficient
-	cfg.RemoteManagement.PanelGitHubRepository = DefaultPanelGitHubRepository
-	cfg.IncognitoBrowser = false // Default to normal browser (AWS uses incognito by force)
+	applyConfigDefaults(&cfg)
 	if err = yaml.Unmarshal(data, &cfg); err != nil {
 		if optional {
 			// In cloud deploy mode, if YAML parsing fails, return empty config instead of error.
@@ -916,6 +900,28 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 
 	// Return the populated configuration struct.
 	return &cfg, nil
+}
+
+func applyConfigDefaults(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	cfg.Host = "" // Default empty: binds to all interfaces (IPv4 + IPv6)
+	cfg.LoggingToFile = false
+	cfg.LogsMaxTotalSizeMB = 0
+	cfg.ErrorLogsMaxFiles = 10
+	cfg.UsageStatisticsEnabled = false
+	cfg.RedisUsageQueueRetentionSeconds = 60
+	cfg.DisableCooling = false
+	cfg.DisableImageGeneration = DisableImageGenerationOff
+	cfg.CodexResponseHeaderTimeout = 30
+	cfg.CodexTimeoutRetries = 2
+	cfg.CodexTimeoutCooldownSeconds = 30
+	cfg.Pprof.Enable = false
+	cfg.Pprof.Addr = DefaultPprofAddr
+	cfg.AmpCode.RestrictManagementToLocalhost = false // Default to false: API key auth is sufficient
+	cfg.RemoteManagement.PanelGitHubRepository = DefaultPanelGitHubRepository
+	cfg.IncognitoBrowser = false // Default to normal browser (AWS uses incognito by force)
 }
 
 // SanitizePayloadRules validates raw JSON payload rule params and drops invalid rules.

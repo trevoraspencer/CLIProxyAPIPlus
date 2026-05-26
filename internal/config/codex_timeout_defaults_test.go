@@ -25,6 +25,20 @@ func TestLoadConfigCodexTimeoutDefaultsAndZeroDisable(t *testing.T) {
 		if cfg.CodexTimeoutCooldownSeconds != 30 {
 			t.Fatalf("CodexTimeoutCooldownSeconds = %d, want 30", cfg.CodexTimeoutCooldownSeconds)
 		}
+
+		parsed, err := ParseConfigBytes([]byte("api-keys:\n  - test-key\n"))
+		if err != nil {
+			t.Fatalf("ParseConfigBytes() error = %v", err)
+		}
+		if parsed.CodexResponseHeaderTimeout != 30 {
+			t.Fatalf("ParseConfigBytes CodexResponseHeaderTimeout = %d, want 30", parsed.CodexResponseHeaderTimeout)
+		}
+		if parsed.CodexTimeoutRetries != 2 {
+			t.Fatalf("ParseConfigBytes CodexTimeoutRetries = %d, want 2", parsed.CodexTimeoutRetries)
+		}
+		if parsed.CodexTimeoutCooldownSeconds != 30 {
+			t.Fatalf("ParseConfigBytes CodexTimeoutCooldownSeconds = %d, want 30", parsed.CodexTimeoutCooldownSeconds)
+		}
 	})
 
 	t.Run("explicit zero disables", func(t *testing.T) {
@@ -51,6 +65,20 @@ codex-timeout-cooldown-seconds: 0
 		}
 		if cfg.CodexTimeoutCooldownSeconds != 0 {
 			t.Fatalf("CodexTimeoutCooldownSeconds = %d, want 0", cfg.CodexTimeoutCooldownSeconds)
+		}
+
+		parsed, err := ParseConfigBytes(data)
+		if err != nil {
+			t.Fatalf("ParseConfigBytes() error = %v", err)
+		}
+		if parsed.CodexResponseHeaderTimeout != 0 {
+			t.Fatalf("ParseConfigBytes CodexResponseHeaderTimeout = %d, want 0", parsed.CodexResponseHeaderTimeout)
+		}
+		if parsed.CodexTimeoutRetries != 0 {
+			t.Fatalf("ParseConfigBytes CodexTimeoutRetries = %d, want 0", parsed.CodexTimeoutRetries)
+		}
+		if parsed.CodexTimeoutCooldownSeconds != 0 {
+			t.Fatalf("ParseConfigBytes CodexTimeoutCooldownSeconds = %d, want 0", parsed.CodexTimeoutCooldownSeconds)
 		}
 	})
 }

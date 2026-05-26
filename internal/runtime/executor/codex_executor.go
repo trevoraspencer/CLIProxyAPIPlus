@@ -1351,6 +1351,18 @@ type codexFirstEventReader struct {
 	first   bool
 }
 
+type codexFirstEventTimeoutError struct {
+	timeout time.Duration
+}
+
+func (e codexFirstEventTimeoutError) Error() string {
+	return fmt.Sprintf("codex: upstream did not send first SSE event within %v", e.timeout)
+}
+
+func (e codexFirstEventTimeoutError) Timeout() bool { return true }
+
+func (e codexFirstEventTimeoutError) Temporary() bool { return true }
+
 func newCodexFirstEventReader(rc io.ReadCloser, timeout time.Duration) *codexFirstEventReader {
 	return &codexFirstEventReader{rc: rc, timeout: timeout, first: true}
 }
@@ -1386,7 +1398,7 @@ func (r *codexFirstEventReader) Read(p []byte) (int, error) {
 		return res.n, res.err
 	case <-timer.C:
 		r.rc.Close()
-		return 0, fmt.Errorf("codex: upstream did not send first SSE event within %v", r.timeout)
+		return 0, codexFirstEventTimeoutError{timeout: r.timeout}
 	}
 }
 

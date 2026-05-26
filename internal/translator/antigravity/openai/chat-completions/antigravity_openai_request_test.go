@@ -23,7 +23,8 @@ func TestConvertOpenAIRequestToAntigravitySanitizesTrueSubschemas(t *testing.T) 
 									"screenshot_id": true
 								},
 								"additionalProperties": false
-							}]
+							}],
+							"additionalItems": true
 						}
 					}
 				}
@@ -47,6 +48,14 @@ func TestConvertOpenAIRequestToAntigravitySanitizesTrueSubschemas(t *testing.T) 
 	)
 	if additionalProperties.Raw != "false" {
 		t.Fatalf("expected additionalProperties false to be preserved, got %s", additionalProperties.Raw)
+	}
+
+	additionalItems := gjson.GetBytes(
+		output,
+		"request.tools.0.functionDeclarations.0.parametersJsonSchema.properties.tuple.additionalItems",
+	)
+	if additionalItems.Raw != "{}" {
+		t.Fatalf("expected additionalItems true to be converted to {}, got %s", additionalItems.Raw)
 	}
 }
 

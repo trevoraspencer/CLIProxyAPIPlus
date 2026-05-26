@@ -404,22 +404,46 @@ func (m *Manager) SetConfig(cfg *internalconfig.Config) {
 	}
 	m.runtimeConfig.Store(cfg)
 
-	// Manage model alias session cache based on oauth-model-alias-strategy config.
-	modelAliasStrategy := strings.ToLower(strings.TrimSpace(cfg.Routing.OAuthModelAliasStrategy))
-	if modelAliasStrategy == "fill-first" || modelAliasStrategy == "fillfirst" || modelAliasStrategy == "ff" {
-		if m.modelAliasSessionCache == nil {
-			m.modelAliasSessionCache = NewModelAliasSessionCache(30 * time.Minute)
-		}
-	} else {
-		if m.modelAliasSessionCache != nil {
-			m.modelAliasSessionCache.Stop()
-			m.modelAliasSessionCache = nil
-		}
-	}
+	m.updateModelAliasSessionCache(isFillFirstModelAliasStrategy(cfg.Routing.OAuthModelAliasStrategy))
 	if !cfg.Home.Enabled {
 		m.clearHomeRuntimeAuths()
 	}
 	m.rebuildAPIKeyModelAliasFromRuntimeConfig()
+}
+
+func isFillFirstModelAliasStrategy(strategy string) bool {
+	strategy = strings.ToLower(strings.TrimSpace(strategy))
+	return strategy == "fill-first" || strategy == "fillfirst" || strategy == "ff"
+}
+
+func (m *Manager) updateModelAliasSessionCache(enabled bool) {
+	if m == nil {
+		return
+	}
+	var old *ModelAliasSessionCache
+	m.mu.Lock()
+	if enabled {
+		if m.modelAliasSessionCache == nil {
+			m.modelAliasSessionCache = NewModelAliasSessionCache(30 * time.Minute)
+		}
+	} else if m.modelAliasSessionCache != nil {
+		old = m.modelAliasSessionCache
+		m.modelAliasSessionCache = nil
+	}
+	m.mu.Unlock()
+	if old != nil {
+		old.Stop()
+	}
+}
+
+func (m *Manager) getModelAliasSessionCache() *ModelAliasSessionCache {
+	if m == nil {
+		return nil
+	}
+	m.mu.RLock()
+	cache := m.modelAliasSessionCache
+	m.mu.RUnlock()
+	return cache
 }
 
 // HomeEnabled reports whether the home control plane integration is enabled in the runtime config.
@@ -590,7 +614,7 @@ func (m *Manager) executionModelCandidates(auth *Auth, routeModel string, sessio
 
 		// Apply fill-first model alias strategy if configured.
 		if m.shouldUseFillFirstModelAlias() && sessionID != "" {
-			cache := m.modelAliasSessionCache
+			cache := m.getModelAliasSessionCache()
 			if cache != nil {
 				if pinnedModel, ok := cache.Get(sessionID, requestedModel); ok {
 					// Check if pinned model is still in the pool.
@@ -624,15 +648,17 @@ func (m *Manager) shouldUseFillFirstModelAlias() bool {
 	if cfg == nil {
 		return false
 	}
-	strategy := strings.ToLower(strings.TrimSpace(cfg.Routing.OAuthModelAliasStrategy))
-	return strategy == "fill-first" || strategy == "fillfirst" || strategy == "ff"
+	return isFillFirstModelAliasStrategy(cfg.Routing.OAuthModelAliasStrategy)
 }
 
 // invalidateModelAliasPin clears a session's pinned model within an alias pool,
 // allowing the next request to fall through to the next pool member.
 func (m *Manager) invalidateModelAliasPin(sessionID, aliasName string) {
-	if m.modelAliasSessionCache != nil && sessionID != "" {
-		m.modelAliasSessionCache.Invalidate(sessionID, aliasName)
+	if sessionID == "" {
+		return
+	}
+	if cache := m.getModelAliasSessionCache(); cache != nil {
+		cache.Invalidate(sessionID, aliasName)
 	}
 }
 
@@ -666,7 +692,11 @@ func (m *Manager) invalidateModelAliasPinForAuth(sessionID string, auth *Auth, r
 }
 
 func (m *Manager) setModelAliasPinForAuth(sessionID string, auth *Auth, routeModel, upstreamModel string, pooled bool) {
-	if m == nil || !pooled || !m.shouldUseFillFirstModelAlias() || sessionID == "" || m.modelAliasSessionCache == nil {
+	if m == nil || !pooled || !m.shouldUseFillFirstModelAlias() || sessionID == "" {
+		return
+	}
+	cache := m.getModelAliasSessionCache()
+	if cache == nil {
 		return
 	}
 	aliasName := m.modelAliasPinName(auth, routeModel)
@@ -674,7 +704,7 @@ func (m *Manager) setModelAliasPinForAuth(sessionID string, auth *Auth, routeMod
 	if aliasName == "" || upstreamModel == "" {
 		return
 	}
-	m.modelAliasSessionCache.Set(sessionID, aliasName, upstreamModel)
+	cache.Set(sessionID, aliasName, upstreamModel)
 }
 
 func (m *Manager) selectionModelForAuth(auth *Auth, routeModel string) string {
@@ -1001,6 +1031,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 			result := Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: false, Error: rerr}
 			result.RetryAfter = retryAfterFromError(errStream)
 			m.MarkResult(ctx, result)
+			m.applyCodexTimeoutCooldownForError(ctx, provider, auth, resultModel, errStream)
 			if isRequestInvalidError(errStream) {
 				return nil, errStream
 			}
@@ -1022,6 +1053,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 				result := Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: false, Error: rerr}
 				result.RetryAfter = retryAfterFromError(bootstrapErr)
 				m.MarkResult(ctx, result)
+				m.applyCodexTimeoutCooldownForError(ctx, provider, auth, resultModel, bootstrapErr)
 				discardStreamChunks(streamResult.Chunks)
 				return nil, bootstrapErr
 			}
@@ -1033,6 +1065,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 				result := Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: false, Error: rerr}
 				result.RetryAfter = retryAfterFromError(bootstrapErr)
 				m.MarkResult(ctx, result)
+				m.applyCodexTimeoutCooldownForError(ctx, provider, auth, resultModel, bootstrapErr)
 				discardStreamChunks(streamResult.Chunks)
 				lastErr = bootstrapErr
 				continue
@@ -1044,6 +1077,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 			result := Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: false, Error: rerr}
 			result.RetryAfter = retryAfterFromError(bootstrapErr)
 			m.MarkResult(ctx, result)
+			m.applyCodexTimeoutCooldownForError(ctx, provider, auth, resultModel, bootstrapErr)
 			discardStreamChunks(streamResult.Chunks)
 			return nil, newStreamBootstrapError(bootstrapErr, streamResult.Headers)
 		}
@@ -1506,6 +1540,22 @@ func isNetworkTimeoutError(err error) bool {
 	return false
 }
 
+func shouldHandleCodexTimeout(provider string, auth *Auth, err error) bool {
+	if !isNetworkTimeoutError(err) {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(provider), "codex") {
+		return true
+	}
+	return auth != nil && strings.EqualFold(strings.TrimSpace(auth.Provider), "codex")
+}
+
+func (m *Manager) applyCodexTimeoutCooldownForError(ctx context.Context, provider string, auth *Auth, model string, err error) {
+	if shouldHandleCodexTimeout(provider, auth, err) {
+		m.applyCodexTimeoutCooldown(ctx, auth, model)
+	}
+}
+
 func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, maxRetryCredentials int) (cliproxyexecutor.Response, error) {
 	if len(providers) == 0 {
 		return cliproxyexecutor.Response{}, &Error{Code: "provider_not_found", Message: "no provider supplied"}
@@ -1594,8 +1644,8 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 					result.RetryAfter = ra
 				}
 				m.MarkResult(execCtx, result)
-				if isNetworkTimeoutError(errExec) {
-					m.applyCodexTimeoutCooldown(execCtx, auth, routeModel)
+				if shouldHandleCodexTimeout(provider, auth, errExec) {
+					m.applyCodexTimeoutCooldown(execCtx, auth, resultModel)
 					codexTimeoutCount++
 					limit := m.codexTimeoutRetryLimit()
 					if limit == 0 {
@@ -1712,8 +1762,8 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 					result.RetryAfter = ra
 				}
 				m.MarkResult(execCtx, result)
-				if isNetworkTimeoutError(errExec) {
-					m.applyCodexTimeoutCooldown(execCtx, auth, routeModel)
+				if shouldHandleCodexTimeout(provider, auth, errExec) {
+					m.applyCodexTimeoutCooldown(execCtx, auth, resultModel)
 					codexTimeoutCount++
 					limit := m.codexTimeoutRetryLimit()
 					if limit == 0 {
@@ -1817,8 +1867,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 			if isRequestInvalidError(errStream) {
 				return nil, errStream
 			}
-			if isNetworkTimeoutError(errStream) {
-				m.applyCodexTimeoutCooldown(execCtx, auth, routeModel)
+			if shouldHandleCodexTimeout(provider, auth, errStream) {
 				codexTimeoutCount++
 				limit := m.codexTimeoutRetryLimit()
 				if limit == 0 {

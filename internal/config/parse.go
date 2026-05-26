@@ -17,19 +17,7 @@ func ParseConfigBytes(data []byte) (*Config, error) {
 	}
 
 	var cfg Config
-	// Keep defaults aligned with LoadConfigOptional.
-	cfg.Host = "" // Default empty: binds to all interfaces (IPv4 + IPv6)
-	cfg.LoggingToFile = false
-	cfg.LogsMaxTotalSizeMB = 0
-	cfg.ErrorLogsMaxFiles = 10
-	cfg.UsageStatisticsEnabled = false
-	cfg.RedisUsageQueueRetentionSeconds = 60
-	cfg.DisableCooling = false
-	cfg.DisableImageGeneration = DisableImageGenerationOff
-	cfg.Pprof.Enable = false
-	cfg.Pprof.Addr = DefaultPprofAddr
-	cfg.AmpCode.RestrictManagementToLocalhost = false // Default to false: API key auth is sufficient
-	cfg.RemoteManagement.PanelGitHubRepository = DefaultPanelGitHubRepository
+	applyConfigDefaults(&cfg)
 
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse config payload: %w", err)

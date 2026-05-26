@@ -501,6 +501,7 @@ func sanitizeAntigravitySchemaNode(schema any) any {
 
 	case map[string]any:
 		for _, keyword := range []string{
+			"additionalItems",
 			"additionalProperties",
 			"contains",
 			"contentSchema",

@@ -138,7 +138,8 @@ openai-compatibility:
   - name: "deepseek"
     enabled: true
     base-url: "https://api.deepseek.com/v1"
-    api-key: "<UPSTREAM_DEEPSEEK_API_KEY>"
+    api-key-entries:
+      - api-key: "<UPSTREAM_DEEPSEEK_API_KEY>"
     models:
       - name: "deepseek-chat"
         alias: "deepseek-v4"

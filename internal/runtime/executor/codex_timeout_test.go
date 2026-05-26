@@ -63,6 +63,24 @@ func TestWrapCodexFirstEventReaderSkipsWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestCodexFirstEventReaderTimeoutImplementsTimeout(t *testing.T) {
+	reader, writer := io.Pipe()
+	defer writer.Close()
+
+	wrapped := newCodexFirstEventReader(reader, time.Millisecond)
+	_, err := wrapped.Read(make([]byte, 1))
+	if err == nil {
+		t.Fatal("Read() error = nil, want timeout")
+	}
+	timeoutErr, ok := err.(interface{ Timeout() bool })
+	if !ok {
+		t.Fatalf("Read() error = %T, want Timeout() error", err)
+	}
+	if !timeoutErr.Timeout() {
+		t.Fatalf("Timeout() = false, want true")
+	}
+}
+
 type emptyReader struct{}
 
 func (*emptyReader) Read([]byte) (int, error) { return 0, io.EOF }
