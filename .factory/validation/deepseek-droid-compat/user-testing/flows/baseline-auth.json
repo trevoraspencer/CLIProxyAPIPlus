@@ -1,0 +1,94 @@
+{
+  "groupId": "baseline-auth",
+  "surface": "go-test-api-cli",
+  "status": "pass",
+  "assertions": [
+    {
+      "id": "VAL-BASE-001",
+      "status": "pass",
+      "evidence": "deepseek-droid-compat/baseline-auth/command-transcript.txt; `go test ./sdk/cliproxy/auth -count=1` exited 0, showing the auth package baseline compiles in the current tree.",
+      "reason": null
+    },
+    {
+      "id": "VAL-BASE-002",
+      "status": "pass",
+      "evidence": "deepseek-droid-compat/baseline-auth/command-transcript.txt; targeted auth command exited 0 for fill-first selector, scheduler cooldown/recovery, manager scheduler, and session-affinity tests.",
+      "reason": null
+    },
+    {
+      "id": "VAL-BASE-003",
+      "status": "pass",
+      "evidence": "deepseek-droid-compat/baseline-auth/command-transcript.txt; multi-package alias command exited 0 for API-key/OAuth alias lookup and requested-model alias tests in auth, SDK, and config packages.",
+      "reason": null
+    },
+    {
+      "id": "VAL-BASE-004",
+      "status": "pass",
+      "evidence": "deepseek-droid-compat/baseline-auth/command-transcript.txt; targeted auth command exited 0 for OpenAI-compatible alias pool, config model alias pool resolution, and model alias session tests.",
+      "reason": null
+    },
+    {
+      "id": "VAL-BASE-005",
+      "status": "pass",
+      "evidence": "deepseek-droid-compat/baseline-auth/command-transcript.txt; `git diff --name-only HEAD` listed only `.factory/library/user-testing.md`, so the current diff contains no changed Go packages requiring additional mapping; prior handoff mapping was reviewed for baseline/auth evidence context.",
+      "reason": null
+    },
+    {
+      "id": "VAL-BASE-008",
+      "status": "pass",
+      "evidence": "deepseek-droid-compat/baseline-auth/command-transcript.txt; report `commands` records all five required exact commands with exit code 0 and package-identifying observations.",
+      "reason": null
+    },
+    {
+      "id": "VAL-BASE-009",
+      "status": "pass",
+      "evidence": "deepseek-droid-compat/baseline-auth/command-transcript.txt; `git status --short` showed only modified `.factory/library/user-testing.md`; no dirty Go implementation files were claimed as mission changes.",
+      "reason": null
+    },
+    {
+      "id": "VAL-BASE-010",
+      "status": "pass",
+      "evidence": "deepseek-droid-compat/baseline-auth/command-transcript.txt; current diff has no new Go helper/support files, and auth helper-related behavior remained covered by passing targeted auth tests.",
+      "reason": null
+    },
+    {
+      "id": "VAL-CROSS-002",
+      "status": "pass",
+      "evidence": "deepseek-droid-compat/baseline-auth/command-transcript.txt; prior smoke handoff records baseline validation after final DeepSeek integration, and current final-tree baseline auth/API alias commands exited 0.",
+      "reason": null
+    }
+  ],
+  "commands": [
+    {
+      "command": "git status --short",
+      "exitCode": 0,
+      "observation": "Output showed one modified Factory guidance artifact: `M .factory/library/user-testing.md`; no Go source files were dirty."
+    },
+    {
+      "command": "git diff --name-only HEAD",
+      "exitCode": 0,
+      "observation": "Output listed only `.factory/library/user-testing.md`; no implementation or Go package files were changed in the current diff."
+    },
+    {
+      "command": "go test ./sdk/cliproxy/auth -count=1",
+      "exitCode": 0,
+      "observation": "Passed: `ok github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth 0.565s`."
+    },
+    {
+      "command": "go test ./sdk/cliproxy/auth -run 'TestFillFirstSelectorPick|TestSchedulerPick_FillFirst|TestSchedulerPick_PromotesExpiredCooldownBeforePick|TestManager_SchedulerTracksMarkResultCooldownAndRecovery|TestSessionAffinitySelector|OpenAICompatAliasPool|ResolveModelAliasPoolFromConfigModels|ModelAliasSession|APIKeyModelAlias|OAuthModelAlias|ResolveOAuthUpstreamModel|LookupAPIKeyUpstreamModel|RequestedModelAlias|TimeoutCooldown|CodexTimeout|CodexResponseHeaderTimeout' -count=1",
+      "exitCode": 0,
+      "observation": "Passed targeted auth selector, scheduler, session-affinity, alias-pool, model-alias, and timeout/cooldown regression tests: `ok .../sdk/cliproxy/auth 0.264s`."
+    },
+    {
+      "command": "go test ./sdk/cliproxy/auth ./sdk/cliproxy ./internal/config -run 'APIKeyModelAlias|OAuthModelAlias|ResolveOAuthUpstreamModel|LookupAPIKeyUpstreamModel|RequestedModelAlias' -count=1",
+      "exitCode": 0,
+      "observation": "Passed targeted API-key/OAuth/requested-model alias tests in `./sdk/cliproxy/auth`, `./sdk/cliproxy`, and `./internal/config`."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "toolsUsed": [
+    "go test",
+    "git"
+  ]
+}

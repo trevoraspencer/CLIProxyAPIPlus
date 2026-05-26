@@ -1,0 +1,84 @@
+{
+  "groupId": "model-listing",
+  "surface": "go-test-api-cli",
+  "status": "pass",
+  "assertions": [
+    {
+      "id": "VAL-MODEL-001",
+      "status": "pass",
+      "evidence": "Targeted go test command exited 0 and go test -list included TestDeepSeekModelListing_ConfigAuthRegistryPath. Reviewed test asserts configured synthetic openai-compatibility provider name deepseek exposes client alias ID deepseek-v4 with OwnedBy deepseek and Type openai-compatibility, while upstream deepseek-chat is not client-visible.",
+      "reason": null
+    },
+    {
+      "id": "VAL-MODEL-002",
+      "status": "pass",
+      "evidence": "Targeted go test command exited 0 and go test -list included TestDeepSeekModelListingAPIFromRegistry. Reviewed API httptest uses authenticated GET /v1/models without client_version, parses JSON, asserts object == list, and finds exactly one data entry id deepseek-v4, object model, owned_by deepseek.",
+      "reason": null
+    },
+    {
+      "id": "VAL-MODEL-003",
+      "status": "pass",
+      "evidence": "Targeted go test command exited 0 and go test -list included TestDeepSeekModelListing_PrefixAndForcePrefixSemantics. Reviewed prefix matrix expects deepseek-v4 plus ds/deepseek-v4 when force prefix is disabled, and only ds/deepseek-v4 when force prefix is enabled.",
+      "reason": null
+    },
+    {
+      "id": "VAL-MODEL-004",
+      "status": "pass",
+      "evidence": "Targeted go test command exited 0 and go test -list included TestDeepSeekModelListing_NegativeAndRemovalCases. Reviewed subtests cover disabled config, empty models, credentialless synthetic auth, header credential usability, and removal clearing stale deepseek-v4 registration.",
+      "reason": null
+    },
+    {
+      "id": "VAL-MODEL-005",
+      "status": "pass",
+      "evidence": "Targeted go test command exited 0; NegativeAndRemovalCases includes no hardcoded default alias by asserting LookupStaticModelInfo(\"deepseek-v4\") == nil. git diff --name-only HEAD exited 0 and showed only .factory/library/user-testing.md, with no runtime default/model catalog Go files in the diff.",
+      "reason": null
+    },
+    {
+      "id": "VAL-MODEL-006",
+      "status": "pass",
+      "evidence": "Targeted go test command exited 0 and go test -list included TestDeepSeekModelListing_NonDeepSeekProviderWithDeepSeekLookingUpstream. Reviewed test uses openrouter with upstream deepseek/deepseek-r1 and asserts only router-r1 is exposed with owned_by openrouter, while deepseek-v4 and the upstream name are absent.",
+      "reason": null
+    },
+    {
+      "id": "VAL-MODEL-007",
+      "status": "pass",
+      "evidence": "This validation ran only local go test and git commands, did not access 127.0.0.1:8318, and did not read or print personal config/auth files. Reviewed model-listing/API tests use synthetic keys, in-memory config, httptest, and temp auth/config paths.",
+      "reason": null
+    },
+    {
+      "id": "VAL-MODEL-008",
+      "status": "pass",
+      "evidence": "Targeted go test command exited 0. Reviewed newTestServer uses t.TempDir() for auth/config paths and httptest; model-listing tests construct config.Config in memory, synthesize auth via SynthesisContext with synthetic keys, and clean global registry registrations.",
+      "reason": null
+    },
+    {
+      "id": "VAL-CROSS-004",
+      "status": "pass",
+      "evidence": "Reviewed final-validation-smoke-handoff.md scope and matrix: automated validation is recorded as local Go tests with synthetic fixtures/httptest and no personal config, remote model updates, or authenticated 8318 state. Current assigned go tests exited 0, and reviewed model-listing/API tests use temp/in-memory config/auth state.",
+      "reason": null
+    }
+  ],
+  "commands": [
+    {
+      "command": "go test ./internal/watcher/synthesizer ./sdk/cliproxy ./internal/registry ./internal/api ./sdk/cliproxy/auth -run 'OpenAICompat|DeepSeek|Model' -count=1",
+      "exitCode": 0,
+      "observation": "All five packages reported ok: internal/watcher/synthesizer, sdk/cliproxy, internal/registry, internal/api, and sdk/cliproxy/auth. Transcript: deepseek-droid-compat/model-listing/go-test-model-run.txt."
+    },
+    {
+      "command": "go test ./internal/watcher/synthesizer ./sdk/cliproxy ./internal/registry ./internal/api ./sdk/cliproxy/auth -list 'DeepSeek.*Model|Model.*DeepSeek|deepseek'",
+      "exitCode": 0,
+      "observation": "Listed model-listing coverage: TestDeepSeekModelListing_ConfigAuthRegistryPath, TestDeepSeekModelListing_PrefixAndForcePrefixSemantics, TestDeepSeekModelListing_NegativeAndRemovalCases, TestDeepSeekModelListing_NonDeepSeekProviderWithDeepSeekLookingUpstream, and TestDeepSeekModelListingAPIFromRegistry. Transcript: deepseek-droid-compat/model-listing/go-test-model-list.txt."
+    },
+    {
+      "command": "git diff --name-only HEAD",
+      "exitCode": 0,
+      "observation": "Output contained only .factory/library/user-testing.md; no Go runtime, registry, API, config, or default model catalog files were present in the diff at command time. Transcript: deepseek-droid-compat/model-listing/git-diff-name-only-head.txt."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "toolsUsed": [
+    "go test",
+    "git"
+  ]
+}
