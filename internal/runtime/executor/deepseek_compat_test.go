@@ -10,6 +10,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	"github.com/tidwall/gjson"
 )
 
 func TestDeepSeekDetectUsesProviderConfigAndBaseURLSignals(t *testing.T) {
@@ -325,5 +326,93 @@ func TestDeepSeekReasoningTurnFromAssistantMessage(t *testing.T) {
 		if _, ok := deepSeekReasoningTurnFromAssistantMessage(rawRejected); ok {
 			t.Fatalf("unexpected turn from %s", rawRejected)
 		}
+	}
+}
+
+func TestDeepSeekPatchRequestPayloadPatchesOnlyEligibleMissingReasoning(t *testing.T) {
+	cache := newDeepSeekReasoningCache(time.Minute, 8)
+	identity := deepSeekCompatIdentity{Enabled: true, Provider: "deepseek", AuthScope: "id:auth-a", Model: "deepseek-chat"}
+	if !cache.Put(identity, deepSeekReasoningTurn{Reasoning: "cached reasoning", ToolCallIDs: []string{"call-1"}}) {
+		t.Fatal("expected cache put")
+	}
+	if !cache.Put(identity, deepSeekReasoningTurn{Reasoning: "conflicting reasoning", ToolCallIDs: []string{"call-2"}}) {
+		t.Fatal("expected cache put for conflicting entry")
+	}
+
+	payload := []byte(`{"model":"deepseek-chat","messages":[{"role":"system","content":"s"},{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"edit","arguments":"{\"x\":1}"}}],"name":"kept","x-extra":{"ok":true}},{"role":"assistant","content":null,"reasoning_content":"","tool_calls":[{"id":"call-2","type":"function","function":{"name":"kept","arguments":"{}"}}]},{"role":"assistant","content":"no tools"},{"role":"user","content":"hi","tool_calls":[{"id":"call-1"}]}]}`)
+	patched := deepSeekPatchRequestPayload(cache, identity, payload)
+
+	first := gjson.GetBytes(patched, "messages.1")
+	if got := gjson.Get(first.Raw, "reasoning_content").String(); got != "cached reasoning" {
+		t.Fatalf("patched reasoning = %q, want cached reasoning; payload=%s", got, patched)
+	}
+	if got := gjson.Get(first.Raw, "name").String(); got != "kept" {
+		t.Fatalf("name field changed to %q", got)
+	}
+	if got := gjson.Get(first.Raw, "tool_calls.0.function.arguments").String(); got != `{"x":1}` {
+		t.Fatalf("arguments field changed to %q", got)
+	}
+	if !gjson.Get(first.Raw, "x-extra.ok").Bool() {
+		t.Fatalf("unknown extension field was not preserved: %s", first.Raw)
+	}
+	if got := gjson.GetBytes(patched, "messages.2.reasoning_content"); !got.Exists() || got.String() != "" {
+		t.Fatalf("existing empty reasoning not preserved: exists=%v value=%q", got.Exists(), got.String())
+	}
+	if gjson.GetBytes(patched, "messages.3.reasoning_content").Exists() {
+		t.Fatalf("assistant without tool calls was patched: %s", patched)
+	}
+	if gjson.GetBytes(patched, "messages.4.reasoning_content").Exists() {
+		t.Fatalf("user message was patched: %s", patched)
+	}
+}
+
+func TestDeepSeekPatchRequestPayloadCacheMissAndNonDeepSeekUnchanged(t *testing.T) {
+	cache := newDeepSeekReasoningCache(time.Minute, 4)
+	deepSeekIdentity := deepSeekCompatIdentity{Enabled: true, Provider: "deepseek", AuthScope: "id:auth-a", Model: "deepseek-chat"}
+	nonDeepSeekIdentity := deepSeekCompatIdentity{Enabled: false, Provider: "openrouter", AuthScope: "id:auth-a", Model: "deepseek-chat"}
+	payload := []byte(`{"model":"deepseek-chat","messages":[{"role":"assistant","content":null,"tool_calls":[{"id":"call-1"}]}]}`)
+	if got := deepSeekPatchRequestPayload(cache, deepSeekIdentity, payload); string(got) != string(payload) {
+		t.Fatalf("cache miss changed payload: got=%s want=%s", got, payload)
+	}
+	if !cache.Put(deepSeekIdentity, deepSeekReasoningTurn{Reasoning: "cached reasoning", ToolCallIDs: []string{"call-1"}}) {
+		t.Fatal("expected cache put")
+	}
+	if got := deepSeekPatchRequestPayload(cache, nonDeepSeekIdentity, payload); string(got) != string(payload) {
+		t.Fatalf("non-DeepSeek changed payload despite matching cache: got=%s want=%s", got, payload)
+	}
+}
+
+func TestDeepSeekNonStreamCaptureStoresOnlyEligibleAssistantToolCallReasoning(t *testing.T) {
+	cache := newDeepSeekReasoningCache(time.Minute, 8)
+	identity := deepSeekCompatIdentity{Enabled: true, Provider: "deepseek", AuthScope: "id:auth-a", Model: "deepseek-chat"}
+	body := []byte(`{"id":"chatcmpl_1","choices":[{"index":0,"message":{"role":"assistant","content":null,"reasoning_content":"synthetic reasoning","tool_calls":[{"id":"call-1","type":"function","function":{"name":"edit","arguments":"{}"}}]}},{"index":1,"message":{"role":"assistant","content":"no tools","reasoning_content":"ignored"}},{"index":2,"message":{"role":"assistant","content":null,"reasoning_content":"","tool_calls":[{"id":"call-empty"}]}},{"index":3,"message":{"role":"user","reasoning_content":"ignored","tool_calls":[{"id":"call-user"}]}}]}`)
+	deepSeekCaptureNonStreamResponse(cache, identity, body)
+	if got, ok := cache.Get(identity, deepSeekReasoningTurn{ToolCallIDs: []string{"call-1"}}); !ok || got != "synthetic reasoning" {
+		t.Fatalf("eligible capture lookup = %q, %v; want synthetic reasoning", got, ok)
+	}
+	for _, id := range []string{"call-empty", "call-user"} {
+		if got, ok := cache.Get(identity, deepSeekReasoningTurn{ToolCallIDs: []string{id}}); ok {
+			t.Fatalf("ineligible id %s captured reasoning %q", id, got)
+		}
+	}
+}
+
+func TestDeepSeekNonStreamCaptureIgnoresMalformedFailedAndNonDeepSeek(t *testing.T) {
+	cache := newDeepSeekReasoningCache(time.Minute, 8)
+	identity := deepSeekCompatIdentity{Enabled: true, Provider: "deepseek", AuthScope: "id:auth-a", Model: "deepseek-chat"}
+	nonDeepSeekIdentity := deepSeekCompatIdentity{Enabled: false, Provider: "openrouter", AuthScope: "id:auth-a", Model: "deepseek-chat"}
+	deepSeekCaptureNonStreamResponse(cache, identity, []byte(`not-json`))
+	deepSeekCaptureNonStreamResponse(cache, identity, []byte(`{"choices":[{"message":{"role":"assistant","reasoning_content":42,"tool_calls":[{"id":"call-1"}]}}]}`))
+	deepSeekCaptureNonStreamResponse(cache, nonDeepSeekIdentity, []byte(`{"choices":[{"message":{"role":"assistant","reasoning_content":"synthetic reasoning","tool_calls":[{"id":"call-1"}]}}]}`))
+	if got := cache.Len(); got != 0 {
+		t.Fatalf("cache Len = %d, want 0 after malformed/ineligible captures", got)
+	}
+}
+
+func TestDeepSeekAssistantTurnHashIgnoresReasoningContent(t *testing.T) {
+	without := []byte(`{"role":"assistant","content":null,"tool_calls":[{"function":{"arguments":"{}","name":"edit"},"id":"call-1","type":"function"}]}`)
+	with := []byte(`{"role":"assistant","content":null,"reasoning_content":"synthetic reasoning","tool_calls":[{"function":{"arguments":"{}","name":"edit"},"id":"call-1","type":"function"}]}`)
+	if deepSeekAssistantTurnHash(without) == "" || deepSeekAssistantTurnHash(without) != deepSeekAssistantTurnHash(with) {
+		t.Fatalf("assistant turn hash should be non-empty and ignore reasoning_content")
 	}
 }

@@ -22,6 +22,7 @@ import (
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 	log "github.com/sirupsen/logrus"
+	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
 
@@ -126,6 +127,12 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 			translated = updated
 		}
 	}
+	finalModel := strings.TrimSpace(gjson.GetBytes(translated, "model").String())
+	if finalModel == "" {
+		finalModel = baseModel
+	}
+	deepSeekIdentity := newDeepSeekCompatIdentity(e.Identifier(), auth, e.resolveCompatConfig(auth), baseURL, finalModel, opts)
+	translated = deepSeekPatchRequestPayload(defaultDeepSeekReasoningCache, deepSeekIdentity, translated)
 
 	url := strings.TrimSuffix(baseURL, "/") + endpoint
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(translated))
@@ -185,6 +192,7 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 		return resp, err
 	}
 	helps.AppendAPIResponseChunk(ctx, e.cfg, body)
+	deepSeekCaptureNonStreamResponse(defaultDeepSeekReasoningCache, deepSeekIdentity, body)
 	reporter.Publish(ctx, helps.ParseOpenAIUsage(body))
 	// Ensure we at least record the request even if upstream doesn't return usage
 	reporter.EnsurePublished(ctx)

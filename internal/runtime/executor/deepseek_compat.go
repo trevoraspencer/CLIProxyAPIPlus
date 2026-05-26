@@ -13,6 +13,8 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 const (
@@ -24,6 +26,8 @@ const (
 var deepSeekAllowedHosts = map[string]struct{}{
 	"api.deepseek.com": {},
 }
+
+var defaultDeepSeekReasoningCache = newDeepSeekReasoningCache(defaultDeepSeekReasoningCacheTTL, defaultDeepSeekReasoningCacheSize)
 
 type deepSeekCompatIdentity struct {
 	Enabled      bool
@@ -329,10 +333,105 @@ func deepSeekReasoningTurnFromAssistantMessage(raw []byte) (deepSeekReasoningTur
 	turn := deepSeekReasoningTurn{
 		Reasoning:         msg.ReasoningContent,
 		ToolCallIDs:       ids,
-		AssistantTurnHash: hashDeepSeekParts(string(raw)),
+		AssistantTurnHash: deepSeekAssistantTurnHash(raw),
 	}
 	if len(turn.ToolCallIDs) == 0 && turn.AssistantTurnHash == "" {
 		return deepSeekReasoningTurn{}, false
 	}
 	return turn, true
+}
+
+func deepSeekRequestTurnFromAssistantMessage(raw []byte) (deepSeekReasoningTurn, bool) {
+	var msg struct {
+		Role      string `json:"role"`
+		ToolCalls []struct {
+			ID string `json:"id"`
+		} `json:"tool_calls"`
+	}
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		return deepSeekReasoningTurn{}, false
+	}
+	if strings.TrimSpace(msg.Role) != "assistant" || len(msg.ToolCalls) == 0 {
+		return deepSeekReasoningTurn{}, false
+	}
+	ids := make([]string, 0, len(msg.ToolCalls))
+	for _, toolCall := range msg.ToolCalls {
+		if id := strings.TrimSpace(toolCall.ID); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return deepSeekReasoningTurn{
+		ToolCallIDs:       ids,
+		AssistantTurnHash: deepSeekAssistantTurnHash(raw),
+	}, true
+}
+
+func deepSeekPatchRequestPayload(cache *deepSeekReasoningCache, identity deepSeekCompatIdentity, payload []byte) []byte {
+	if cache == nil || !identity.Enabled || len(payload) == 0 || !json.Valid(payload) {
+		return payload
+	}
+	messages := gjson.GetBytes(payload, "messages")
+	if !messages.IsArray() {
+		return payload
+	}
+	patched := payload
+	messages.ForEach(func(key, value gjson.Result) bool {
+		if strings.TrimSpace(gjson.Get(value.Raw, "role").String()) != "assistant" {
+			return true
+		}
+		if gjson.Get(value.Raw, "reasoning_content").Exists() {
+			return true
+		}
+		toolCalls := gjson.Get(value.Raw, "tool_calls")
+		if !toolCalls.IsArray() || len(toolCalls.Array()) == 0 {
+			return true
+		}
+		turn, ok := deepSeekRequestTurnFromAssistantMessage([]byte(value.Raw))
+		if !ok {
+			return true
+		}
+		reasoning, ok := cache.Get(identity, turn)
+		if !ok {
+			return true
+		}
+		updated, err := sjson.SetBytes(patched, "messages."+key.String()+".reasoning_content", reasoning)
+		if err == nil {
+			patched = updated
+		}
+		return true
+	})
+	return patched
+}
+
+func deepSeekCaptureNonStreamResponse(cache *deepSeekReasoningCache, identity deepSeekCompatIdentity, responseBody []byte) {
+	if cache == nil || !identity.Enabled || len(responseBody) == 0 || !json.Valid(responseBody) {
+		return
+	}
+	choices := gjson.GetBytes(responseBody, "choices")
+	if !choices.IsArray() {
+		return
+	}
+	choices.ForEach(func(_, choice gjson.Result) bool {
+		message := gjson.Get(choice.Raw, "message")
+		if !message.Exists() || !message.IsObject() {
+			return true
+		}
+		if turn, ok := deepSeekReasoningTurnFromAssistantMessage([]byte(message.Raw)); ok {
+			cache.Put(identity, turn)
+		}
+		return true
+	})
+}
+
+func deepSeekAssistantTurnHash(raw []byte) string {
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return ""
+	}
+	delete(obj, "reasoning_content")
+	normalized, err := json.Marshal(obj)
+	if err != nil {
+		return ""
+	}
+	return hashDeepSeekParts(string(normalized))
 }
