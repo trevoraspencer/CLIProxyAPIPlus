@@ -1339,6 +1339,45 @@ func (m *Manager) ExecuteStream(ctx context.Context, providers []string, req cli
 	return nil, &Error{Code: "auth_not_found", Message: "no auth available"}
 }
 
+// codexTimeoutCooldownDuration returns the configured cooldown duration for
+// Codex auths that experienced a timeout. Default is 30 seconds.
+func (m *Manager) codexTimeoutCooldownDuration() time.Duration {
+	cfg, _ := m.runtimeConfig.Load().(*internalconfig.Config)
+	if cfg != nil && cfg.CodexTimeoutCooldownSeconds > 0 {
+		return time.Duration(cfg.CodexTimeoutCooldownSeconds) * time.Second
+	}
+	return 30 * time.Second
+}
+
+// codexTimeoutRetryLimit returns the maximum number of timeout-based retries
+// allowed for Codex requests. Default is 2. Returns 0 if retries are disabled.
+func (m *Manager) codexTimeoutRetryLimit() int {
+	cfg, _ := m.runtimeConfig.Load().(*internalconfig.Config)
+	if cfg != nil {
+		return cfg.CodexTimeoutRetries
+	}
+	return 2
+}
+
+// applyCodexTimeoutCooldown applies a temporary cooldown to an auth that
+// experienced a timeout, so the selector skips it for subsequent attempts.
+func (m *Manager) applyCodexTimeoutCooldown(auth *Auth, model string) {
+	ApplyTimeoutCooldown(auth, model, m.codexTimeoutCooldownDuration(), time.Now())
+}
+
+// isNetworkTimeoutError returns true if the error is a network timeout
+// (implements net.Error with Timeout() == true).
+func isNetworkTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr interface{ Timeout() bool }
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	return false
+}
+
 func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, maxRetryCredentials int) (cliproxyexecutor.Response, error) {
 	if len(providers) == 0 {
 		return cliproxyexecutor.Response{}, &Error{Code: "provider_not_found", Message: "no provider supplied"}
@@ -1350,6 +1389,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 	tried := make(map[string]struct{})
 	attempted := make(map[string]struct{})
 	var lastErr error
+	codexTimeoutCount := 0
 	for {
 		if !homeMode && maxRetryCredentials > 0 && len(attempted) >= maxRetryCredentials {
 			if lastErr != nil {
@@ -1424,6 +1464,16 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 					result.RetryAfter = ra
 				}
 				m.MarkResult(execCtx, result)
+				if isNetworkTimeoutError(errExec) {
+					m.applyCodexTimeoutCooldown(auth, routeModel)
+					codexTimeoutCount++
+					if m.codexTimeoutRetryLimit() > 0 && codexTimeoutCount > m.codexTimeoutRetryLimit() {
+						if lastErr != nil {
+							return cliproxyexecutor.Response{}, lastErr
+						}
+						return cliproxyexecutor.Response{}, errExec
+					}
+				}
 				if isRequestInvalidError(errExec) {
 					return cliproxyexecutor.Response{}, errExec
 				}
@@ -1457,6 +1507,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 	tried := make(map[string]struct{})
 	attempted := make(map[string]struct{})
 	var lastErr error
+	codexTimeoutCount := 0
 	for {
 		if !homeMode && maxRetryCredentials > 0 && len(attempted) >= maxRetryCredentials {
 			if lastErr != nil {
@@ -1523,6 +1574,16 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 					result.RetryAfter = ra
 				}
 				m.MarkResult(execCtx, result)
+				if isNetworkTimeoutError(errExec) {
+					m.applyCodexTimeoutCooldown(auth, routeModel)
+					codexTimeoutCount++
+					if m.codexTimeoutRetryLimit() > 0 && codexTimeoutCount > m.codexTimeoutRetryLimit() {
+						if lastErr != nil {
+							return cliproxyexecutor.Response{}, lastErr
+						}
+						return cliproxyexecutor.Response{}, errExec
+					}
+				}
 				if isRequestInvalidError(errExec) {
 					return cliproxyexecutor.Response{}, errExec
 				}
@@ -1556,6 +1617,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 	tried := make(map[string]struct{})
 	attempted := make(map[string]struct{})
 	var lastErr error
+	codexTimeoutCount := 0
 	for {
 		if !homeMode && maxRetryCredentials > 0 && len(attempted) >= maxRetryCredentials {
 			if lastErr != nil {
@@ -1608,6 +1670,17 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 			}
 			if isRequestInvalidError(errStream) {
 				return nil, errStream
+			}
+			if isNetworkTimeoutError(errStream) {
+				m.applyCodexTimeoutCooldown(auth, routeModel)
+				codexTimeoutCount++
+				if m.codexTimeoutRetryLimit() > 0 && codexTimeoutCount > m.codexTimeoutRetryLimit() {
+					lastErr = errStream
+					if homeMode {
+						homeAuthCount++
+					}
+					continue
+				}
 			}
 			lastErr = errStream
 			if homeMode {

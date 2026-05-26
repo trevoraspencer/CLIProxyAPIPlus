@@ -23,6 +23,16 @@ type SDKConfig struct {
 	// Default is 30 seconds. Set to 0 to disable the timeout.
 	CodexResponseHeaderTimeout int `yaml:"codex-response-header-timeout" json:"codex-response-header-timeout"`
 
+	// CodexTimeoutRetries specifies the maximum number of automatic retries with a
+	// different auth when a Codex request times out before the first event.
+	// Default is 2. Set to 0 to disable automatic timeout retries.
+	CodexTimeoutRetries int `yaml:"codex-timeout-retries" json:"codex-timeout-retries"`
+
+	// CodexTimeoutCooldownSeconds specifies how long (in seconds) an auth that
+	// experienced a timeout should be excluded from selection.
+	// Default is 30 seconds. Set to 0 to disable timeout cooldown.
+	CodexTimeoutCooldownSeconds int `yaml:"codex-timeout-cooldown-seconds" json:"codex-timeout-cooldown-seconds"`
+
 	// EnableGeminiCLIEndpoint controls whether Gemini CLI internal endpoints (/v1internal:*) are enabled.
 	// Default is false for safety; when false, /v1internal:* requests are rejected.
 	EnableGeminiCLIEndpoint bool `yaml:"enable-gemini-cli-endpoint" json:"enable-gemini-cli-endpoint"`

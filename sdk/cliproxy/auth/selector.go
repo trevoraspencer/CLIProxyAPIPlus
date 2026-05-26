@@ -427,6 +427,35 @@ func isAuthBlockedForModel(auth *Auth, model string, now time.Time) (bool, block
 	return false, blockReasonNone, time.Time{}
 }
 
+// ApplyTimeoutCooldown marks an auth's per-model state as unavailable due to a
+// network timeout (e.g. response header timeout, first-SSE-event timeout).
+// The selector will skip this auth for subsequent requests for the given model
+// until the cooldown duration elapses.
+func ApplyTimeoutCooldown(auth *Auth, model string, cooldown time.Duration, now time.Time) {
+	if auth == nil || cooldown <= 0 {
+		return
+	}
+	if model == "" {
+		if !auth.Unavailable {
+			auth.NextRetryAfter = now.Add(cooldown)
+		}
+		auth.Unavailable = true
+		return
+	}
+	if auth.ModelStates == nil {
+		auth.ModelStates = make(map[string]*ModelState)
+	}
+	state := auth.ModelStates[model]
+	if state == nil {
+		state = &ModelState{}
+		auth.ModelStates[model] = state
+	}
+	if !state.Unavailable {
+		state.NextRetryAfter = now.Add(cooldown)
+	}
+	state.Unavailable = true
+}
+
 // sessionPattern matches Claude Code user_id format:
 // user_{hash}_account__session_{uuid}
 var sessionPattern = regexp.MustCompile(`_session_([a-f0-9-]+)$`)
