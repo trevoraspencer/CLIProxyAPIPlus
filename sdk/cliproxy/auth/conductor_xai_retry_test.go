@@ -10,32 +10,32 @@ import (
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 )
 
-type xaiOAuthRetryStore struct {
+type xaiRetryStore struct {
 	mu    sync.Mutex
 	saved []*Auth
 }
 
-func (s *xaiOAuthRetryStore) List(context.Context) ([]*Auth, error) { return nil, nil }
+func (s *xaiRetryStore) List(context.Context) ([]*Auth, error) { return nil, nil }
 
-func (s *xaiOAuthRetryStore) Save(_ context.Context, auth *Auth) (string, error) {
+func (s *xaiRetryStore) Save(_ context.Context, auth *Auth) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.saved = append(s.saved, auth.Clone())
 	return "", nil
 }
 
-func (s *xaiOAuthRetryStore) Delete(context.Context, string) error { return nil }
+func (s *xaiRetryStore) Delete(context.Context, string) error { return nil }
 
-func (s *xaiOAuthRetryStore) lastAccessToken() string {
+func (s *xaiRetryStore) lastAccessToken() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.saved) == 0 {
 		return ""
 	}
-	return xaiOAuthAccessToken(s.saved[len(s.saved)-1])
+	return xaiAccessToken(s.saved[len(s.saved)-1])
 }
 
-type xaiOAuthRetryExecutor struct {
+type xaiRetryExecutor struct {
 	refreshErr error
 
 	mu            sync.Mutex
@@ -46,24 +46,24 @@ type xaiOAuthRetryExecutor struct {
 	streamTokens  []string
 }
 
-func (e *xaiOAuthRetryExecutor) Identifier() string { return "xai-oauth" }
+func (e *xaiRetryExecutor) Identifier() string { return "xai" }
 
-func (e *xaiOAuthRetryExecutor) Execute(_ context.Context, auth *Auth, _ cliproxyexecutor.Request, _ cliproxyexecutor.Options) (cliproxyexecutor.Response, error) {
+func (e *xaiRetryExecutor) Execute(_ context.Context, auth *Auth, _ cliproxyexecutor.Request, _ cliproxyexecutor.Options) (cliproxyexecutor.Response, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.executeCalls++
-	e.executeTokens = append(e.executeTokens, xaiOAuthAccessToken(auth))
+	e.executeTokens = append(e.executeTokens, xaiAccessToken(auth))
 	if e.executeCalls == 1 {
 		return cliproxyexecutor.Response{}, &Error{HTTPStatus: http.StatusUnauthorized, Message: "expired token"}
 	}
 	return cliproxyexecutor.Response{Payload: []byte(`{"ok":true}`)}, nil
 }
 
-func (e *xaiOAuthRetryExecutor) ExecuteStream(_ context.Context, auth *Auth, _ cliproxyexecutor.Request, _ cliproxyexecutor.Options) (*cliproxyexecutor.StreamResult, error) {
+func (e *xaiRetryExecutor) ExecuteStream(_ context.Context, auth *Auth, _ cliproxyexecutor.Request, _ cliproxyexecutor.Options) (*cliproxyexecutor.StreamResult, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.streamCalls++
-	e.streamTokens = append(e.streamTokens, xaiOAuthAccessToken(auth))
+	e.streamTokens = append(e.streamTokens, xaiAccessToken(auth))
 	if e.streamCalls == 1 {
 		return nil, &Error{HTTPStatus: http.StatusUnauthorized, Message: "expired token"}
 	}
@@ -73,7 +73,7 @@ func (e *xaiOAuthRetryExecutor) ExecuteStream(_ context.Context, auth *Auth, _ c
 	return &cliproxyexecutor.StreamResult{Chunks: ch}, nil
 }
 
-func (e *xaiOAuthRetryExecutor) Refresh(_ context.Context, auth *Auth) (*Auth, error) {
+func (e *xaiRetryExecutor) Refresh(_ context.Context, auth *Auth) (*Auth, error) {
 	e.mu.Lock()
 	e.refreshCalls++
 	refreshErr := e.refreshErr
@@ -86,33 +86,33 @@ func (e *xaiOAuthRetryExecutor) Refresh(_ context.Context, auth *Auth) (*Auth, e
 		updated.Metadata = make(map[string]any)
 	}
 	updated.Metadata["access_token"] = "fresh-token"
-	if xaiOAuthRefreshToken(updated) == "" {
+	if xaiRefreshToken(updated) == "" {
 		updated.Metadata["refresh_token"] = "refresh-token"
 	}
 	return updated, nil
 }
 
-func (e *xaiOAuthRetryExecutor) CountTokens(context.Context, *Auth, cliproxyexecutor.Request, cliproxyexecutor.Options) (cliproxyexecutor.Response, error) {
+func (e *xaiRetryExecutor) CountTokens(context.Context, *Auth, cliproxyexecutor.Request, cliproxyexecutor.Options) (cliproxyexecutor.Response, error) {
 	return cliproxyexecutor.Response{}, nil
 }
 
-func (e *xaiOAuthRetryExecutor) HttpRequest(context.Context, *Auth, *http.Request) (*http.Response, error) {
+func (e *xaiRetryExecutor) HttpRequest(context.Context, *Auth, *http.Request) (*http.Response, error) {
 	return nil, nil
 }
 
-func (e *xaiOAuthRetryExecutor) snapshot() (executeCalls, streamCalls, refreshCalls int, executeTokens, streamTokens []string) {
+func (e *xaiRetryExecutor) snapshot() (executeCalls, streamCalls, refreshCalls int, executeTokens, streamTokens []string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.executeCalls, e.streamCalls, e.refreshCalls, append([]string(nil), e.executeTokens...), append([]string(nil), e.streamTokens...)
 }
 
-func TestManagerExecute_XAIOAuthRefreshesAndRetriesOnceAfter401(t *testing.T) {
+func TestManagerExecute_XAIRefreshesAndRetriesOnceAfter401(t *testing.T) {
 	ctx := context.Background()
-	store := &xaiOAuthRetryStore{}
-	exec := &xaiOAuthRetryExecutor{}
-	manager, auth := newXAIOAuthRetryManager(t, store, exec)
+	store := &xaiRetryStore{}
+	exec := &xaiRetryExecutor{}
+	manager, auth := newXAIRetryManager(t, store, exec)
 
-	resp, err := manager.Execute(ctx, []string{"xai-oauth"}, cliproxyexecutor.Request{
+	resp, err := manager.Execute(ctx, []string{"xai"}, cliproxyexecutor.Request{
 		Model: "grok-4.3",
 	}, cliproxyexecutor.Options{})
 	if err != nil {
@@ -136,7 +136,7 @@ func TestManagerExecute_XAIOAuthRefreshesAndRetriesOnceAfter401(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing auth %q", auth.ID)
 	}
-	if got := xaiOAuthAccessToken(updated); got != "fresh-token" {
+	if got := xaiAccessToken(updated); got != "fresh-token" {
 		t.Fatalf("manager access token = %q, want fresh-token", got)
 	}
 	if got := store.lastAccessToken(); got != "fresh-token" {
@@ -144,13 +144,13 @@ func TestManagerExecute_XAIOAuthRefreshesAndRetriesOnceAfter401(t *testing.T) {
 	}
 }
 
-func TestManagerExecuteStream_XAIOAuthRefreshesAndRetriesPreStream401(t *testing.T) {
+func TestManagerExecuteStream_XAIRefreshesAndRetriesPreStream401(t *testing.T) {
 	ctx := context.Background()
-	store := &xaiOAuthRetryStore{}
-	exec := &xaiOAuthRetryExecutor{}
-	manager, auth := newXAIOAuthRetryManager(t, store, exec)
+	store := &xaiRetryStore{}
+	exec := &xaiRetryExecutor{}
+	manager, auth := newXAIRetryManager(t, store, exec)
 
-	result, err := manager.ExecuteStream(ctx, []string{"xai-oauth"}, cliproxyexecutor.Request{
+	result, err := manager.ExecuteStream(ctx, []string{"xai"}, cliproxyexecutor.Request{
 		Model: "grok-4.3",
 	}, cliproxyexecutor.Options{})
 	if err != nil {
@@ -181,7 +181,7 @@ func TestManagerExecuteStream_XAIOAuthRefreshesAndRetriesPreStream401(t *testing
 	if !ok {
 		t.Fatalf("missing auth %q", auth.ID)
 	}
-	if got := xaiOAuthAccessToken(updated); got != "fresh-token" {
+	if got := xaiAccessToken(updated); got != "fresh-token" {
 		t.Fatalf("manager access token = %q, want fresh-token", got)
 	}
 	if got := store.lastAccessToken(); got != "fresh-token" {
@@ -189,12 +189,12 @@ func TestManagerExecuteStream_XAIOAuthRefreshesAndRetriesPreStream401(t *testing
 	}
 }
 
-func TestManagerExecute_XAIOAuthRefreshFailureLeavesOriginal401(t *testing.T) {
+func TestManagerExecute_XAIRefreshFailureLeavesOriginal401(t *testing.T) {
 	ctx := context.Background()
-	exec := &xaiOAuthRetryExecutor{refreshErr: errors.New("refresh failed")}
-	manager, _ := newXAIOAuthRetryManager(t, &xaiOAuthRetryStore{}, exec)
+	exec := &xaiRetryExecutor{refreshErr: errors.New("refresh failed")}
+	manager, _ := newXAIRetryManager(t, &xaiRetryStore{}, exec)
 
-	_, err := manager.Execute(ctx, []string{"xai-oauth"}, cliproxyexecutor.Request{
+	_, err := manager.Execute(ctx, []string{"xai"}, cliproxyexecutor.Request{
 		Model: "grok-4.3",
 	}, cliproxyexecutor.Options{})
 	if err == nil {
@@ -213,21 +213,21 @@ func TestManagerExecute_XAIOAuthRefreshFailureLeavesOriginal401(t *testing.T) {
 	}
 }
 
-func newXAIOAuthRetryManager(t *testing.T, store Store, exec *xaiOAuthRetryExecutor) (*Manager, *Auth) {
+func newXAIRetryManager(t *testing.T, store Store, exec *xaiRetryExecutor) (*Manager, *Auth) {
 	t.Helper()
 
 	manager := NewManager(store, &RoundRobinSelector{}, nil)
 	manager.RegisterExecutor(exec)
 	auth := &Auth{
-		ID:       "xai-oauth-retry-auth",
-		Provider: "xai-oauth",
+		ID:       "xai-retry-auth",
+		Provider: "xai",
 		Metadata: map[string]any{
-			"type":          "xai-oauth",
+			"type":          "xai",
 			"access_token":  "expired-token",
 			"refresh_token": "refresh-token",
 		},
 	}
-	registerSchedulerModels(t, "xai-oauth", "grok-4.3", auth.ID)
+	registerSchedulerModels(t, "xai", "grok-4.3", auth.ID)
 	if _, err := manager.Register(WithSkipPersist(context.Background()), auth); err != nil {
 		t.Fatalf("register auth: %v", err)
 	}

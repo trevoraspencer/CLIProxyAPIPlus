@@ -219,11 +219,19 @@ func TestOAuthModelAliasChannel_Kiro(t *testing.T) {
 	}
 }
 
-func TestOAuthModelAliasChannel_XAIOAuth(t *testing.T) {
+func TestOAuthModelAliasChannel_XAI(t *testing.T) {
 	t.Parallel()
 
-	if got := OAuthModelAliasChannel("xai-oauth", "oauth"); got != "xai-oauth" {
-		t.Fatalf("OAuthModelAliasChannel() = %q, want %q", got, "xai-oauth")
+	if got := OAuthModelAliasChannel("xai", "oauth"); got != "xai" {
+		t.Fatalf("OAuthModelAliasChannel() = %q, want %q", got, "xai")
+	}
+}
+
+func TestOAuthModelAliasChannel_XAIAPIKey(t *testing.T) {
+	t.Parallel()
+
+	if got := OAuthModelAliasChannel("xai", "apikey"); got != "" {
+		t.Fatalf("OAuthModelAliasChannel() = %q, want empty string", got)
 	}
 }
 

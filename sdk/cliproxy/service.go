@@ -460,12 +460,24 @@ func (s *Service) ensureExecutorsForAuthWithMode(a *coreauth.Auth, forceReplace 
 		return
 	case "antigravity":
 		s.coreManager.RegisterExecutor(executor.NewAntigravityExecutor(s.cfg))
-	case "xai-oauth":
-		s.coreManager.RegisterExecutor(executor.NewXAIOAuthExecutor(s.cfg))
 	case "claude":
 		s.coreManager.RegisterExecutor(executor.NewClaudeExecutor(s.cfg))
 	case "kimi":
 		s.coreManager.RegisterExecutor(executor.NewKimiExecutor(s.cfg))
+	case "zai":
+		s.coreManager.RegisterExecutor(executor.NewZAIExecutor(s.cfg))
+	case "kiro":
+		s.coreManager.RegisterExecutor(executor.NewKiroExecutor(s.cfg))
+	case "kilo":
+		s.coreManager.RegisterExecutor(executor.NewKiloExecutor(s.cfg))
+	case "cursor":
+		s.coreManager.RegisterExecutor(executor.NewCursorExecutor(s.cfg))
+	case "github-copilot":
+		s.coreManager.RegisterExecutor(executor.NewGitHubCopilotExecutor(s.cfg))
+	case "codebuddy":
+		s.coreManager.RegisterExecutor(executor.NewCodeBuddyExecutor(s.cfg))
+	case "gitlab":
+		s.coreManager.RegisterExecutor(executor.NewGitLabExecutor(s.cfg))
 	case "xai":
 		s.coreManager.RegisterExecutor(executor.NewXAIExecutor(s.cfg))
 	default:
@@ -623,7 +635,7 @@ func (s *Service) registerHomeExecutors() {
 	s.coreManager.RegisterExecutor(executor.NewGeminiCLIExecutor(s.cfg))
 	s.coreManager.RegisterExecutor(executor.NewAIStudioExecutor(s.cfg, "", s.wsGateway))
 	s.coreManager.RegisterExecutor(executor.NewAntigravityExecutor(s.cfg))
-	s.coreManager.RegisterExecutor(executor.NewXAIOAuthExecutor(s.cfg))
+	s.coreManager.RegisterExecutor(executor.NewXAIExecutor(s.cfg))
 	s.coreManager.RegisterExecutor(executor.NewKimiExecutor(s.cfg))
 	s.coreManager.RegisterExecutor(executor.NewZAIExecutor(s.cfg))
 	s.coreManager.RegisterExecutor(executor.NewOpenAICompatExecutor("openai-compatibility", s.cfg))
@@ -1155,9 +1167,6 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 	case "antigravity":
 		models = registry.GetAntigravityModels()
 		models = applyExcludedModels(models, excluded)
-	case "xai-oauth":
-		models = registry.GetXAIOAuthModels()
-		models = applyExcludedModels(models, excluded)
 	case "claude":
 		models = registry.GetClaudeModels()
 		if entry := s.resolveConfigClaudeKey(a); entry != nil {
@@ -1197,6 +1206,42 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 		models = applyExcludedModels(models, excluded)
 	case "kimi":
 		models = registry.GetKimiModels()
+		models = applyExcludedModels(models, excluded)
+	case "zai":
+		models = registry.GetZAIModels()
+		if entry := s.resolveConfigZAIKey(a); entry != nil {
+			if len(entry.Models) > 0 {
+				models = buildZAIConfigModels(entry)
+			}
+			if authKind == "apikey" {
+				excluded = entry.ExcludedModels
+			}
+		}
+		models = applyExcludedModels(models, excluded)
+	case "cursor":
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		models = executor.FetchCursorModels(ctx, a, s.cfg)
+		models = applyExcludedModels(models, excluded)
+	case "github-copilot":
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		models = executor.FetchGitHubCopilotModels(ctx, a, s.cfg)
+		models = applyExcludedModels(models, excluded)
+	case "kiro":
+		models = s.fetchKiroModels(a)
+		if !kirocommon.IsSystemPromptInjectEnabled() {
+			models = filterAgenticVariants(models)
+		}
+		models = applyExcludedModels(models, excluded)
+	case "kilo":
+		models = executor.FetchKiloModels(context.Background(), a, s.cfg)
+		models = applyExcludedModels(models, excluded)
+	case "gitlab":
+		models = executor.GitLabModelsFromAuth(a)
+		models = applyExcludedModels(models, excluded)
+	case "codebuddy":
+		models = registry.GetCodeBuddyModels()
 		models = applyExcludedModels(models, excluded)
 	case "xai":
 		models = registry.GetXAIModels()

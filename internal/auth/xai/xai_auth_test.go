@@ -11,6 +11,9 @@ import (
 )
 
 func TestBuildAuthorizeURLIncludesXAIRequiredParameters(t *testing.T) {
+	const testClientID = "test-xai-oauth-client-id"
+	t.Setenv(ClientIDEnv, testClientID)
+
 	authURL, err := BuildAuthorizeURL(AuthorizeURLParams{
 		AuthorizationEndpoint: "https://auth.x.ai/oauth/authorize",
 		RedirectURI:           "http://127.0.0.1:56121/callback",
@@ -33,7 +36,7 @@ func TestBuildAuthorizeURLIncludesXAIRequiredParameters(t *testing.T) {
 	query := parsed.Query()
 	want := map[string]string{
 		"response_type":         "code",
-		"client_id":             ClientID,
+		"client_id":             testClientID,
 		"redirect_uri":          "http://127.0.0.1:56121/callback",
 		"scope":                 Scope,
 		"code_challenge":        "challenge",
@@ -63,6 +66,9 @@ func TestValidateOAuthEndpointRejectsNonXAIOrigin(t *testing.T) {
 }
 
 func TestRefreshTokensPostsClientIDAndRefreshToken(t *testing.T) {
+	const testClientID = "test-xai-oauth-client-id"
+	t.Setenv(ClientIDEnv, testClientID)
+
 	var gotForm url.Values
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -96,8 +102,8 @@ func TestRefreshTokensPostsClientIDAndRefreshToken(t *testing.T) {
 	if gotForm.Get("grant_type") != "refresh_token" {
 		t.Fatalf("grant_type = %q, want refresh_token", gotForm.Get("grant_type"))
 	}
-	if gotForm.Get("client_id") != ClientID {
-		t.Fatalf("client_id = %q, want %q", gotForm.Get("client_id"), ClientID)
+	if gotForm.Get("client_id") != testClientID {
+		t.Fatalf("client_id = %q, want %q", gotForm.Get("client_id"), testClientID)
 	}
 	if gotForm.Get("refresh_token") != "old-refresh" {
 		t.Fatalf("refresh_token = %q, want old-refresh", gotForm.Get("refresh_token"))

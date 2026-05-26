@@ -501,6 +501,7 @@ func (e *XAIExecutor) prepareResponsesRequest(ctx context.Context, req cliproxye
 	body, _ = sjson.DeleteBytes(body, "prompt_cache_retention")
 	body, _ = sjson.DeleteBytes(body, "safety_identifier")
 	body, _ = sjson.DeleteBytes(body, "stream_options")
+	body = sanitizeXAIUnsupportedTools(body)
 	body = normalizeXAITools(body)
 	body = normalizeXAIInputReasoningItems(body)
 	body = normalizeCodexInstructions(body)
@@ -937,4 +938,124 @@ func xaiPatchCompletedOutput(eventData []byte, outputItemsByIndex map[int64][]by
 
 	patched, _ := sjson.SetRawBytes(eventData, "response.output", outputArray)
 	return patched
+}
+
+func sanitizeXAIUnsupportedTools(body []byte) []byte {
+	body = filterXAIToolArray(body, "tools")
+	body = filterXAIToolChoice(body)
+	body = filterXAIInputItems(body)
+	return body
+}
+
+func filterXAIToolArray(body []byte, path string) []byte {
+	tools := gjson.GetBytes(body, path)
+	if !tools.IsArray() {
+		return body
+	}
+
+	filtered := make([]any, 0, len(tools.Array()))
+	tools.ForEach(func(_, tool gjson.Result) bool {
+		if !tool.IsObject() {
+			return true
+		}
+		toolType := tool.Get("type").String()
+		if toolType == xaiNamespaceToolType {
+			if namespaceTools := tool.Get("tools"); namespaceTools.IsArray() {
+				namespaceTools.ForEach(func(_, nestedTool gjson.Result) bool {
+					if nestedTool.IsObject() && xaiSupportsToolType(nestedTool.Get("type").String()) {
+						filtered = append(filtered, nestedTool.Value())
+					}
+					return true
+				})
+			}
+			return true
+		}
+		if xaiSupportsToolType(toolType) {
+			filtered = append(filtered, tool.Value())
+		}
+		return true
+	})
+
+	if len(filtered) == 0 {
+		updated, _ := sjson.DeleteBytes(body, path)
+		return updated
+	}
+	updated, _ := sjson.SetBytes(body, path, filtered)
+	return updated
+}
+
+func filterXAIToolChoice(body []byte) []byte {
+	toolChoice := gjson.GetBytes(body, "tool_choice")
+	if !toolChoice.Exists() {
+		return body
+	}
+	if toolChoice.Type == gjson.String {
+		switch strings.TrimSpace(toolChoice.String()) {
+		case "auto", "none":
+			return body
+		case "required":
+			if !gjson.GetBytes(body, "tools").IsArray() {
+				updated, _ := sjson.DeleteBytes(body, "tool_choice")
+				return updated
+			}
+			return body
+		default:
+			updated, _ := sjson.DeleteBytes(body, "tool_choice")
+			return updated
+		}
+	}
+	if !toolChoice.IsObject() {
+		return body
+	}
+
+	toolChoiceType := strings.TrimSpace(toolChoice.Get("type").String())
+	if toolChoiceType == "allowed_tools" {
+		body = filterXAIToolArray(body, "tool_choice.tools")
+		if !gjson.GetBytes(body, "tool_choice.tools").IsArray() {
+			updated, _ := sjson.DeleteBytes(body, "tool_choice")
+			return updated
+		}
+		return body
+	}
+
+	if toolChoiceType != "" && !xaiSupportsToolType(toolChoiceType) {
+		updated, _ := sjson.DeleteBytes(body, "tool_choice")
+		return updated
+	}
+	return body
+}
+
+func filterXAIInputItems(body []byte) []byte {
+	input := gjson.GetBytes(body, "input")
+	if !input.IsArray() {
+		return body
+	}
+
+	filtered := make([]any, 0, len(input.Array()))
+	changed := false
+	input.ForEach(func(_, item gjson.Result) bool {
+		switch strings.TrimSpace(item.Get("type").String()) {
+		case "custom_tool_call", "custom_tool_call_output":
+			changed = true
+			return true
+		default:
+			filtered = append(filtered, item.Value())
+			return true
+		}
+	})
+
+	if !changed {
+		return body
+	}
+	updated, _ := sjson.SetBytes(body, "input", filtered)
+	return updated
+}
+
+func xaiSupportsToolType(toolType string) bool {
+	switch strings.TrimSpace(toolType) {
+	case "function", "web_search", "x_search", "collections_search", "file_search", "code_execution", "code_interpreter", "mcp", "shell":
+		return true
+	default:
+		return false
+	}
 }

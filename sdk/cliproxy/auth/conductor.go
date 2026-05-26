@@ -870,15 +870,15 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 	}
 	ctx = contextWithRequestedModelAlias(ctx, opts, routeModel)
 	var lastErr error
-	xaiOAuth401Retried := false
+	xai401Retried := false
 	for idx, execModel := range execModels {
 		resultModel := m.stateModelForExecution(auth, routeModel, execModel, pooled)
 		execReq := req
 		execReq.Model = execModel
 		streamResult, errStream := executor.ExecuteStream(ctx, auth, execReq, opts)
-		if errStream != nil && shouldRetryXAIOAuthAfter401(provider, auth, errStream, xaiOAuth401Retried) {
-			xaiOAuth401Retried = true
-			if refreshed, ok := m.refreshXAIOAuthForRetry(ctx, executor, auth); ok {
+		if errStream != nil && shouldRetryXAIAfter401(provider, auth, errStream, xai401Retried) {
+			xai401Retried = true
+			if refreshed, ok := m.refreshXAIForRetry(ctx, executor, auth); ok {
 				auth = refreshed
 				streamResult, errStream = executor.ExecuteStream(ctx, auth, execReq, opts)
 			}
@@ -1398,15 +1398,15 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 			continue
 		}
 		var authErr error
-		xaiOAuth401Retried := false
+		xai401Retried := false
 		for _, upstreamModel := range models {
 			resultModel := m.stateModelForExecution(auth, routeModel, upstreamModel, pooled)
 			execReq := req
 			execReq.Model = upstreamModel
 			resp, errExec := executor.Execute(execCtx, auth, execReq, opts)
-			if errExec != nil && shouldRetryXAIOAuthAfter401(provider, auth, errExec, xaiOAuth401Retried) {
-				xaiOAuth401Retried = true
-				if refreshed, ok := m.refreshXAIOAuthForRetry(execCtx, executor, auth); ok {
+			if errExec != nil && shouldRetryXAIAfter401(provider, auth, errExec, xai401Retried) {
+				xai401Retried = true
+				if refreshed, ok := m.refreshXAIForRetry(execCtx, executor, auth); ok {
 					auth = refreshed
 					resp, errExec = executor.Execute(execCtx, auth, execReq, opts)
 				}
@@ -2654,7 +2654,7 @@ func isUnauthorizedError(err error) bool {
 	return strings.Contains(raw, "status 401") || strings.Contains(raw, "401 unauthorized")
 }
 
-func shouldRetryXAIOAuthAfter401(provider string, auth *Auth, err error, alreadyRetried bool) bool {
+func shouldRetryXAIAfter401(provider string, auth *Auth, err error, alreadyRetried bool) bool {
 	if alreadyRetried || auth == nil || err == nil {
 		return false
 	}
@@ -2662,26 +2662,26 @@ func shouldRetryXAIOAuthAfter401(provider string, auth *Auth, err error, already
 	if provider == "" {
 		provider = strings.ToLower(strings.TrimSpace(auth.Provider))
 	}
-	if provider != "xai-oauth" {
+	if provider != "xai" {
 		return false
 	}
 	if statusCodeFromError(err) != http.StatusUnauthorized {
 		return false
 	}
-	return xaiOAuthRefreshToken(auth) != ""
+	return xaiRefreshToken(auth) != ""
 }
 
-func (m *Manager) refreshXAIOAuthForRetry(ctx context.Context, executor ProviderExecutor, auth *Auth) (*Auth, bool) {
+func (m *Manager) refreshXAIForRetry(ctx context.Context, executor ProviderExecutor, auth *Auth) (*Auth, bool) {
 	if m == nil || executor == nil || auth == nil {
 		return nil, false
 	}
 	refreshed, err := executor.Refresh(ctx, auth.Clone())
 	if err != nil {
-		log.Debugf("xai-oauth auth %s refresh before 401 retry failed: %v", auth.ID, err)
+		log.Debugf("xai auth %s refresh before 401 retry failed: %v", auth.ID, err)
 		return nil, false
 	}
 	if refreshed == nil {
-		log.Debugf("xai-oauth auth %s refresh before 401 retry returned no auth", auth.ID)
+		log.Debugf("xai auth %s refresh before 401 retry returned no auth", auth.ID)
 		return nil, false
 	}
 	if strings.TrimSpace(refreshed.ID) == "" {
@@ -2690,13 +2690,13 @@ func (m *Manager) refreshXAIOAuthForRetry(ctx context.Context, executor Provider
 	if strings.TrimSpace(refreshed.Provider) == "" {
 		refreshed.Provider = auth.Provider
 	}
-	if xaiOAuthAccessToken(refreshed) == "" {
-		log.Debugf("xai-oauth auth %s refresh before 401 retry returned no access token", auth.ID)
+	if xaiAccessToken(refreshed) == "" {
+		log.Debugf("xai auth %s refresh before 401 retry returned no access token", auth.ID)
 		return nil, false
 	}
 	updated, errUpdate := m.Update(ctx, refreshed)
 	if errUpdate != nil {
-		log.Debugf("xai-oauth auth %s refresh before 401 retry update failed: %v", auth.ID, errUpdate)
+		log.Debugf("xai auth %s refresh before 401 retry update failed: %v", auth.ID, errUpdate)
 		return nil, false
 	}
 	if updated == nil {
@@ -2705,7 +2705,7 @@ func (m *Manager) refreshXAIOAuthForRetry(ctx context.Context, executor Provider
 	return updated, true
 }
 
-func xaiOAuthRefreshToken(auth *Auth) string {
+func xaiRefreshToken(auth *Auth) string {
 	if auth == nil || auth.Metadata == nil {
 		return ""
 	}
@@ -2715,7 +2715,7 @@ func xaiOAuthRefreshToken(auth *Auth) string {
 	return ""
 }
 
-func xaiOAuthAccessToken(auth *Auth) string {
+func xaiAccessToken(auth *Auth) string {
 	if auth == nil {
 		return ""
 	}

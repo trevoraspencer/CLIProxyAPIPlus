@@ -152,34 +152,48 @@ These routes help you select the protocol surface, but they do not by themselves
 
 ## x.ai OAuth
 
-CLIProxyAPI supports x.ai Grok accounts through OAuth, not through an x.ai API-key configuration. Start the login flow with:
+CLIProxyAPI supports x.ai Grok accounts through OAuth, not through an x.ai API-key configuration. Set `CLIPROXY_XAI_OAUTH_CLIENT_ID` to the public Grok CLI OAuth client ID (this is not a secret). Plus does not ship the value in-repo; copy it from upstream [`internal/auth/xai/types.go`](https://github.com/router-for-me/CLIProxyAPI/blob/main/internal/auth/xai/types.go) (`ClientID` constant). You can export it in your shell or add it to `.env` (see `.env.example`).
+
+Start the login flow with:
 
 ```sh
-cli-proxy-api --xai-oauth-login
+export CLIPROXY_XAI_OAUTH_CLIENT_ID="<grok-cli-oauth-client-id>"
+cli-proxy-api --xai-login
 ```
 
 The login flow opens a browser and stores the resulting OAuth credential under the normal auth storage location. For headless or remote shells, add `--no-browser` and open the printed URL manually. If the default callback port is unavailable, set a provider-specific callback listener with `--oauth-callback-port <port>`, for example:
 
 ```sh
-cli-proxy-api --xai-oauth-login --no-browser --oauth-callback-port 56121
+cli-proxy-api --xai-login --no-browser --oauth-callback-port 56121
 ```
 
 After login, run the proxy normally and point OpenAI-compatible clients at the local proxy endpoint, for example `http://127.0.0.1:8317/v1/chat/completions`, using one of the local proxy `api-keys` from your `config.yaml`. The upstream x.ai OAuth tokens stay in auth storage; do not put x.ai OAuth tokens in `api-keys` or commit them to the repository.
 
-The x.ai OAuth provider/channel name is `xai-oauth`. Built-in x.ai OAuth model metadata includes `grok-4.3`, so clients can request that model directly after an account is available. Use `oauth-model-alias` when you want a different client-visible name, and `oauth-excluded-models` when you want to hide models from listing/routing:
+**Migration:** Existing `auths/*.xai-oauth.json` files from older Plus builds are no longer recognized. Run `--xai-login` again to create credentials under the `xai` provider.
+
+The x.ai OAuth provider/channel name is `xai`. The registry keeps the full upstream xAI catalog; `config.example.yaml` ships a default `oauth-excluded-models` whitelist that exposes only `grok-build-0.1` and `grok-4.3` until you remove entries. Use `oauth-model-alias` when you want a different client-visible name, and adjust `oauth-excluded-models` when you want more models in listing/routing:
 
 ```yaml
 oauth-model-alias:
-  xai-oauth:
+  xai:
     - name: "grok-4.3"
       alias: "grok"
 
 oauth-excluded-models:
-  xai-oauth:
-    - "grok-4.20-0309-non-reasoning"
+  xai:
+    - grok-4.20-0309-reasoning
+    - grok-4.20-0309-non-reasoning
+    - grok-4.20-multi-agent-0309
+    - grok-3-mini
+    - grok-3-mini-fast
+    - grok-imagine-image
+    - grok-imagine-image-quality
+    - grok-imagine-video
 ```
 
-Aliases and exclusions apply to OAuth channels such as `xai-oauth`; they do not configure upstream API-key credentials.
+Plus preserves two behaviors on top of upstream xAI: an aggressive tool sanitizer for Factory/Droid clients (unsupported tool types and `custom_tool_call` input items are stripped after upstream normalization), and immediate 401 refresh-and-retry in the auth conductor.
+
+Aliases and exclusions apply to OAuth channels such as `xai`; they do not configure upstream API-key credentials.
 
 ## Z.AI GLM Coding Plan API Keys
 

@@ -110,11 +110,11 @@ func TestXAIExecutorExecuteShapesResponsesRequest(t *testing.T) {
 		t.Fatalf("input.2 exists, want consecutive reasoning item merged; body=%s", string(gotBody))
 	}
 	tools := gjson.GetBytes(gotBody, "tools").Array()
-	if len(tools) != 5 {
-		t.Fatalf("tools length = %d, want 5; body=%s", len(tools), string(gotBody))
+	if len(tools) != 3 {
+		t.Fatalf("tools length = %d, want 3; body=%s", len(tools), string(gotBody))
 	}
 	foundAutomationUpdate := false
-	foundNamespaceCustom := false
+	foundLookup := false
 	for i, tool := range tools {
 		toolType := tool.Get("type").String()
 		if toolType == "image_generation" {
@@ -126,14 +126,14 @@ func TestXAIExecutorExecuteShapesResponsesRequest(t *testing.T) {
 		if toolType == "function" && !tool.Get("parameters").Exists() {
 			t.Fatalf("tools.%d.parameters missing for xAI function tool; body=%s", i, string(gotBody))
 		}
-		if got := tool.Get("name").String(); got == "apply_patch" {
-			t.Fatalf("tools.%d.name = apply_patch, want removed; body=%s", i, string(gotBody))
+		if got := tool.Get("name").String(); got == "apply_patch" || got == "ApplyPatch" || got == "custom_lookup" || got == "namespace_custom" {
+			t.Fatalf("tools.%d.name = %q, want removed; body=%s", i, got, string(gotBody))
 		}
 		switch tool.Get("name").String() {
 		case "automation_update":
 			foundAutomationUpdate = true
-		case "namespace_custom":
-			foundNamespaceCustom = true
+		case "lookup":
+			foundLookup = true
 		}
 		if toolType == "web_search" {
 			if tool.Get("external_web_access").Exists() {
@@ -147,8 +147,8 @@ func TestXAIExecutorExecuteShapesResponsesRequest(t *testing.T) {
 	if !foundAutomationUpdate {
 		t.Fatalf("namespace function tool was not moved to top-level tools; body=%s", string(gotBody))
 	}
-	if !foundNamespaceCustom {
-		t.Fatalf("namespace custom tool was not moved to top-level tools; body=%s", string(gotBody))
+	if !foundLookup {
+		t.Fatalf("supported function tool lookup missing from tools; body=%s", string(gotBody))
 	}
 	for _, include := range gjson.GetBytes(gotBody, "include").Array() {
 		if include.String() == "reasoning.encrypted_content" {
@@ -275,8 +275,8 @@ func TestXAIExecutorExecuteStreamFiltersToolSearchTool(t *testing.T) {
 	}
 
 	tools := gjson.GetBytes(gotBody, "tools").Array()
-	if len(tools) != 5 {
-		t.Fatalf("tools length = %d, want 5; body=%s", len(tools), string(gotBody))
+	if len(tools) != 3 {
+		t.Fatalf("tools length = %d, want 3; body=%s", len(tools), string(gotBody))
 	}
 	if gjson.GetBytes(gotBody, "input.0.content").Exists() {
 		t.Fatalf("input.0.content exists, want removed; body=%s", string(gotBody))
@@ -297,7 +297,7 @@ func TestXAIExecutorExecuteStreamFiltersToolSearchTool(t *testing.T) {
 		t.Fatalf("input.2.summary.0.text = %q, want separate; body=%s", got, string(gotBody))
 	}
 	foundAutomationUpdate := false
-	foundNamespaceCustom := false
+	foundLookup := false
 	for i, tool := range tools {
 		toolType := tool.Get("type").String()
 		if toolType == "image_generation" {
@@ -309,14 +309,14 @@ func TestXAIExecutorExecuteStreamFiltersToolSearchTool(t *testing.T) {
 		if toolType == "function" && !tool.Get("parameters").Exists() {
 			t.Fatalf("tools.%d.parameters missing for xAI function tool; body=%s", i, string(gotBody))
 		}
-		if got := tool.Get("name").String(); got == "apply_patch" {
-			t.Fatalf("tools.%d.name = apply_patch, want removed; body=%s", i, string(gotBody))
+		if got := tool.Get("name").String(); got == "apply_patch" || got == "ApplyPatch" || got == "custom_lookup" || got == "namespace_custom" {
+			t.Fatalf("tools.%d.name = %q, want removed; body=%s", i, got, string(gotBody))
 		}
 		switch tool.Get("name").String() {
 		case "automation_update":
 			foundAutomationUpdate = true
-		case "namespace_custom":
-			foundNamespaceCustom = true
+		case "lookup":
+			foundLookup = true
 		}
 		if toolType == "web_search" {
 			if tool.Get("external_web_access").Exists() {
@@ -330,8 +330,8 @@ func TestXAIExecutorExecuteStreamFiltersToolSearchTool(t *testing.T) {
 	if !foundAutomationUpdate {
 		t.Fatalf("namespace function tool was not moved to top-level tools; body=%s", string(gotBody))
 	}
-	if !foundNamespaceCustom {
-		t.Fatalf("namespace custom tool was not moved to top-level tools; body=%s", string(gotBody))
+	if !foundLookup {
+		t.Fatalf("supported function tool lookup missing from tools; body=%s", string(gotBody))
 	}
 }
 
@@ -590,5 +590,152 @@ func TestXAIExecutorExecuteVideosUsesNativeEndpointFromRequestPath(t *testing.T)
 				t.Fatalf("path = %q, want %s", gotPath, tt.wantPath)
 			}
 		})
+	}
+}
+
+func TestPrepareResponsesRequestRemovesApplyPatchCustomTools(t *testing.T) {
+	t.Parallel()
+
+	exec := NewXAIExecutor(&config.Config{})
+	prepared, err := exec.prepareResponsesRequest(context.Background(), cliproxyexecutor.Request{
+		Model: "grok-4.3",
+		Payload: []byte(`{
+			"model": "grok-4.3",
+			"stream": false,
+			"tools": [
+				{"type": "function", "name": "Read", "parameters": {"type": "object"}},
+				{"type": "custom", "name": "ApplyPatch", "format": {"type": "grammar", "syntax": "lark", "definition": "start: /a/"}}
+			],
+			"tool_choice": {
+				"type": "allowed_tools",
+				"tools": [
+					{"type": "function", "name": "Read"},
+					{"type": "custom", "name": "ApplyPatch"}
+				]
+			},
+			"input": [
+				{"type": "custom_tool_call", "call_id": "call-custom", "name": "ApplyPatch", "input": "*** Begin Patch"},
+				{"type": "custom_tool_call_output", "call_id": "call-custom", "output": "ok"},
+				{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}
+			]
+		}`),
+	}, cliproxyexecutor.Options{
+		SourceFormat: sdktranslator.FormatOpenAIResponse,
+	}, false)
+	if err != nil {
+		t.Fatalf("prepareResponsesRequest() error = %v", err)
+	}
+
+	out := prepared.body
+	if got := gjson.GetBytes(out, "tools.#").Int(); got != 1 {
+		t.Fatalf("tools count = %d, want 1; body=%s", got, string(out))
+	}
+	if got := gjson.GetBytes(out, "tools.0.name").String(); got != "Read" {
+		t.Fatalf("tools.0.name = %q, want Read; body=%s", got, string(out))
+	}
+	if gjson.GetBytes(out, `tools.#(name=="ApplyPatch")`).Exists() {
+		t.Fatalf("ApplyPatch tool should be removed; body=%s", string(out))
+	}
+	if got := gjson.GetBytes(out, "tool_choice.tools.#").Int(); got != 1 {
+		t.Fatalf("tool_choice.tools count = %d, want 1; body=%s", got, string(out))
+	}
+	if got := gjson.GetBytes(out, "input.#").Int(); got != 1 {
+		t.Fatalf("input count = %d, want 1; body=%s", got, string(out))
+	}
+	if got := gjson.GetBytes(out, "input.0.type").String(); got != "message" {
+		t.Fatalf("input.0.type = %q, want message; body=%s", got, string(out))
+	}
+}
+
+func TestSanitizeXAIUnsupportedToolsFiltersCustomTools(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{
+		"model": "grok-4.3",
+		"stream": false,
+		"tools": [
+			{"type": "function", "name": "Read", "parameters": {"type": "object"}},
+			{"type": "custom", "name": "ApplyPatch", "format": {"type": "grammar", "syntax": "lark", "definition": "start: /a/"}}
+		],
+		"tool_choice": {
+			"type": "allowed_tools",
+			"tools": [
+				{"type": "function", "name": "Read"},
+				{"type": "custom", "name": "ApplyPatch"}
+			]
+		},
+		"input": [
+			{"type": "custom_tool_call", "call_id": "call-custom", "name": "ApplyPatch", "input": "*** Begin Patch"},
+			{"type": "custom_tool_call_output", "call_id": "call-custom", "output": "ok"},
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}
+		]
+	}`)
+
+	out := sanitizeXAIUnsupportedTools(body)
+
+	if got := gjson.GetBytes(out, "tools.#").Int(); got != 1 {
+		t.Fatalf("tools count = %d, want 1; body=%s", got, string(out))
+	}
+	if got := gjson.GetBytes(out, "tools.0.type").String(); got != "function" {
+		t.Fatalf("tools.0.type = %q, want function; body=%s", got, string(out))
+	}
+	if gjson.GetBytes(out, `tools.#(type=="custom")`).Exists() {
+		t.Fatalf("custom tool should be filtered; body=%s", string(out))
+	}
+	if got := gjson.GetBytes(out, "tool_choice.tools.#").Int(); got != 1 {
+		t.Fatalf("tool_choice.tools count = %d, want 1; body=%s", got, string(out))
+	}
+	if got := gjson.GetBytes(out, "tool_choice.tools.0.type").String(); got != "function" {
+		t.Fatalf("tool_choice.tools.0.type = %q, want function; body=%s", got, string(out))
+	}
+	if got := gjson.GetBytes(out, "input.#").Int(); got != 1 {
+		t.Fatalf("input count = %d, want 1; body=%s", got, string(out))
+	}
+	if got := gjson.GetBytes(out, "input.0.type").String(); got != "message" {
+		t.Fatalf("input.0.type = %q, want message; body=%s", got, string(out))
+	}
+}
+
+func TestSanitizeXAIUnsupportedToolsDeletesUnsupportedToolChoice(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{
+		"model": "grok-4.3",
+		"tools": [
+			{"type": "custom", "name": "ApplyPatch", "format": {"type": "grammar", "syntax": "lark", "definition": "start: /a/"}}
+		],
+		"tool_choice": {"type": "custom", "name": "ApplyPatch"},
+		"input": "hello"
+	}`)
+
+	out := sanitizeXAIUnsupportedTools(body)
+
+	if gjson.GetBytes(out, "tools").Exists() {
+		t.Fatalf("tools should be deleted when all entries are unsupported; body=%s", string(out))
+	}
+	if gjson.GetBytes(out, "tool_choice").Exists() {
+		t.Fatalf("tool_choice should be deleted when it targets an unsupported tool; body=%s", string(out))
+	}
+}
+
+func TestSanitizeXAIUnsupportedToolsDeletesRequiredToolChoiceWithoutTools(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{
+		"model": "grok-4.3",
+		"tools": [
+			{"type": "custom", "name": "ApplyPatch", "format": {"type": "grammar", "syntax": "lark", "definition": "start: /a/"}}
+		],
+		"tool_choice": "required",
+		"input": "hello"
+	}`)
+
+	out := sanitizeXAIUnsupportedTools(body)
+
+	if gjson.GetBytes(out, "tools").Exists() {
+		t.Fatalf("tools should be deleted when all entries are unsupported; body=%s", string(out))
+	}
+	if gjson.GetBytes(out, "tool_choice").Exists() {
+		t.Fatalf("required tool_choice should be deleted when no supported tools remain; body=%s", string(out))
 	}
 }

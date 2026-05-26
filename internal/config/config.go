@@ -172,7 +172,7 @@ type Config struct {
 	AmpCode AmpCode `yaml:"ampcode" json:"ampcode"`
 
 	// OAuthExcludedModels defines per-provider global model exclusions applied to OAuth/file-backed auth entries.
-	// Supported channels: gemini-cli, vertex, aistudio, antigravity, xai-oauth, claude, codex, iflow, kiro, github-copilot, kimi.
+	// Supported channels: gemini-cli, vertex, aistudio, antigravity, xai, claude, codex, iflow, kiro, github-copilot, kimi.
 	OAuthExcludedModels map[string][]string `yaml:"oauth-excluded-models,omitempty" json:"oauth-excluded-models,omitempty"`
 
 	// OAuthModelAlias defines global model name aliases for OAuth/file-backed auth channels.

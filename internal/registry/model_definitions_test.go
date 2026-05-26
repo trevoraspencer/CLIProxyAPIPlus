@@ -52,19 +52,22 @@ func TestKiroStaticModelsAreDynamic(t *testing.T) {
 	}
 }
 
-func TestXAIOAuthStaticModels(t *testing.T) {
-	models := GetXAIOAuthModels()
-	if findModelInfo(models, "grok-4.3") == nil {
-		t.Fatal("expected xai-oauth models to include grok-4.3")
+func TestXAIStaticModels(t *testing.T) {
+	models := GetXAIModels()
+	for _, modelID := range []string{"grok-build-0.1", "grok-4.3"} {
+		model := findModelInfo(models, modelID)
+		if model == nil {
+			t.Fatalf("expected xai models to include %s", modelID)
+		}
+		if model.Type != "xai" || model.OwnedBy != "xai" {
+			t.Fatalf("%s metadata = %+v", modelID, model)
+		}
 	}
-	if len(models) != 1 {
-		t.Fatalf("expected xai-oauth to expose only grok-4.3, got %d models", len(models))
+	if channelModels := GetStaticModelDefinitionsByChannel("xai"); findModelInfo(channelModels, "grok-build-0.1") == nil {
+		t.Fatal("expected xai static channel lookup to include grok-build-0.1")
 	}
-	if channelModels := GetStaticModelDefinitionsByChannel("xai-oauth"); findModelInfo(channelModels, "grok-4.3") == nil {
-		t.Fatal("expected xai-oauth static channel lookup to include grok-4.3")
-	}
-	if lookup := LookupStaticModelInfo("grok-4.3"); lookup == nil || lookup.Type != "xai-oauth" {
-		t.Fatalf("LookupStaticModelInfo(grok-4.3) = %+v", lookup)
+	if lookup := LookupStaticModelInfo("grok-build-0.1"); lookup == nil || lookup.Type != "xai" {
+		t.Fatalf("LookupStaticModelInfo(grok-build-0.1) = %+v", lookup)
 	}
 }
 
@@ -102,61 +105,21 @@ func hasEndpoint(endpoints []string, endpoint string) bool {
 	return false
 }
 
-func TestXAIOAuthModelsFallbackToRemoteXAISection(t *testing.T) {
-	withModelsCatalog(t, &staticModelsJSON{
-		XAI: []*ModelInfo{
-			{
-				ID:                  "grok-4.3",
-				Object:              "model",
-				Created:             1773014400,
-				OwnedBy:             "xai",
-				Type:                "xai",
-				Name:                "grok-4.3",
-				ContextLength:       1000000,
-				MaxCompletionTokens: 65536,
-			},
-			{
-				ID:                  "grok-unsupported",
-				Object:              "model",
-				Created:             1773014400,
-				OwnedBy:             "xai",
-				Type:                "xai",
-				Name:                "grok-unsupported",
-				ContextLength:       1000000,
-				MaxCompletionTokens: 65536,
-			},
-		},
-	})
+func TestDetectChangedProvidersIncludesZAIModels(t *testing.T) {
+	oldData := &staticModelsJSON{
+		ZAI: []*ModelInfo{{ID: "glm-5", Object: "model", Type: "zai", Created: 1}},
+	}
+	newData := &staticModelsJSON{
+		ZAI: []*ModelInfo{{ID: "glm-5", Object: "model", Type: "zai", Created: 2}},
+	}
 
-	models := GetXAIOAuthModels()
-	model := findModelInfo(models, "grok-4.3")
-	if model == nil {
-		t.Fatal("expected xai-oauth models to use supported remote xai section model")
-	}
-	if model.Type != "xai-oauth" {
-		t.Fatalf("fallback model type = %q, want xai-oauth", model.Type)
-	}
-	if findModelInfo(models, "grok-unsupported") != nil {
-		t.Fatal("expected xai-oauth models to filter unsupported remote xai models")
-	}
-	if got := getModels().XAI[0].Type; got != "xai" {
-		t.Fatalf("fallback mutated source xai model type = %q, want xai", got)
+	changed := detectChangedProviders(oldData, newData)
+	if !containsString(changed, "zai") {
+		t.Fatalf("detectChangedProviders() = %v, want zai", changed)
 	}
 }
 
-func TestXAIOAuthModelsFallbackToBuiltinsWhenCatalogMissing(t *testing.T) {
-	withModelsCatalog(t, &staticModelsJSON{})
-
-	models := GetXAIOAuthModels()
-	if findModelInfo(models, "grok-4.3") == nil {
-		t.Fatal("expected built-in xai-oauth fallback to include grok-4.3")
-	}
-	if len(models) != 1 {
-		t.Fatalf("expected built-in xai-oauth fallback to expose only grok-4.3, got %d models", len(models))
-	}
-}
-
-func TestDetectChangedProvidersIncludesEffectiveXAIOAuthModels(t *testing.T) {
+func TestDetectChangedProvidersIncludesXAIModels(t *testing.T) {
 	oldData := &staticModelsJSON{
 		XAI: []*ModelInfo{{ID: "grok-4.3", Object: "model", Type: "xai", Created: 1}},
 	}
@@ -165,8 +128,8 @@ func TestDetectChangedProvidersIncludesEffectiveXAIOAuthModels(t *testing.T) {
 	}
 
 	changed := detectChangedProviders(oldData, newData)
-	if !containsString(changed, "xai-oauth") {
-		t.Fatalf("detectChangedProviders() = %v, want xai-oauth", changed)
+	if !containsString(changed, "xai") {
+		t.Fatalf("detectChangedProviders() = %v, want xai", changed)
 	}
 }
 

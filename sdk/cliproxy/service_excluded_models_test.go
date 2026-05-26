@@ -132,3 +132,56 @@ func TestRegisterModelsForAuth_OpenAICompatibilityImageModelType(t *testing.T) {
 		t.Fatal("expected chat model to keep default thinking support")
 	}
 }
+
+func TestRegisterModelsForAuth_XAIDefaultWhitelistExposesBuildAnd43(t *testing.T) {
+	service := &Service{
+		cfg: &config.Config{
+			OAuthExcludedModels: map[string][]string{
+				"xai": {
+					"grok-4.20-0309-reasoning",
+					"grok-4.20-0309-non-reasoning",
+					"grok-4.20-multi-agent-0309",
+					"grok-3-mini",
+					"grok-3-mini-fast",
+					"grok-imagine-image",
+					"grok-imagine-image-quality",
+					"grok-imagine-video",
+				},
+			},
+		},
+	}
+	auth := &coreauth.Auth{
+		ID:       "auth-xai",
+		Provider: "xai",
+		Status:   coreauth.StatusActive,
+		Attributes: map[string]string{
+			"auth_kind": "oauth",
+		},
+	}
+
+	modelRegistry := internalregistry.GetGlobalRegistry()
+	modelRegistry.UnregisterClient(auth.ID)
+	t.Cleanup(func() {
+		modelRegistry.UnregisterClient(auth.ID)
+	})
+
+	service.registerModelsForAuth(auth)
+
+	models := modelRegistry.GetModelsForClient(auth.ID)
+	if len(models) != 2 {
+		t.Fatalf("expected exactly 2 xai models, got %d", len(models))
+	}
+
+	seen := make(map[string]bool, len(models))
+	for _, model := range models {
+		if model == nil {
+			continue
+		}
+		seen[strings.TrimSpace(model.ID)] = true
+	}
+	for _, want := range []string{"grok-build-0.1", "grok-4.3"} {
+		if !seen[want] {
+			t.Fatalf("expected model %q to be registered, got ids: %v", want, seen)
+		}
+	}
+}

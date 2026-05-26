@@ -10,8 +10,8 @@ const (
 	Issuer = "https://auth.x.ai"
 	// DiscoveryURL is the OIDC discovery endpoint used to resolve OAuth endpoints.
 	DiscoveryURL = Issuer + "/.well-known/openid-configuration"
-	// ClientID is the public xAI Grok CLI OAuth client ID.
-	ClientID = "b1a00492-073a-47ea-816f-4c329264a828"
+	// ClientIDEnv is the environment variable for the xAI Grok CLI OAuth client ID.
+	ClientIDEnv = "CLIPROXY_XAI_OAUTH_CLIENT_ID"
 	// Scope is the OAuth scope set required for xAI API access.
 	Scope = "openid profile email offline_access grok-cli:access api:access"
 	// RedirectHost is the loopback host used by xAI OAuth.

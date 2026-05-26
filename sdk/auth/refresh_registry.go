@@ -12,9 +12,8 @@ func init() {
 	registerRefreshLead("gemini", func() Authenticator { return NewGeminiAuthenticator() })
 	registerRefreshLead("gemini-cli", func() Authenticator { return NewGeminiAuthenticator() })
 	registerRefreshLead("antigravity", func() Authenticator { return NewAntigravityAuthenticator() })
-	registerRefreshLead("xai-oauth", func() Authenticator { return NewXAIOAuthAuthenticator() })
-	registerRefreshLead("kimi", func() Authenticator { return NewKimiAuthenticator() })
 	registerRefreshLead("xai", func() Authenticator { return NewXAIAuthenticator() })
+	registerRefreshLead("kimi", func() Authenticator { return NewKimiAuthenticator() })
 }
 
 func registerRefreshLead(provider string, factory func() Authenticator) {

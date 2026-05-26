@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -60,8 +61,20 @@ func ValidateOAuthEndpoint(rawURL string, field string) (string, error) {
 	return rawURL, nil
 }
 
+func oauthClientID() (string, error) {
+	clientID := strings.TrimSpace(os.Getenv(ClientIDEnv))
+	if clientID == "" {
+		return "", fmt.Errorf("xai oauth: %s is required", ClientIDEnv)
+	}
+	return clientID, nil
+}
+
 // BuildAuthorizeURL builds the browser URL for xAI OAuth.
 func BuildAuthorizeURL(params AuthorizeURLParams) (string, error) {
+	clientID, err := oauthClientID()
+	if err != nil {
+		return "", err
+	}
 	endpoint, err := ValidateOAuthEndpoint(params.AuthorizationEndpoint, "authorization_endpoint")
 	if err != nil {
 		return "", err
@@ -80,7 +93,7 @@ func BuildAuthorizeURL(params AuthorizeURLParams) (string, error) {
 	}
 	values := url.Values{
 		"response_type":         {"code"},
-		"client_id":             {ClientID},
+		"client_id":             {clientID},
 		"redirect_uri":          {strings.TrimSpace(params.RedirectURI)},
 		"scope":                 {Scope},
 		"code_challenge":        {strings.TrimSpace(params.CodeChallenge)},
@@ -155,11 +168,15 @@ func (a *XAIAuth) ExchangeCodeForTokens(ctx context.Context, code, redirectURI s
 		}
 		tokenEndpoint = discovery.TokenEndpoint
 	}
+	clientID, err := oauthClientID()
+	if err != nil {
+		return nil, err
+	}
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {strings.TrimSpace(code)},
 		"redirect_uri":  {strings.TrimSpace(redirectURI)},
-		"client_id":     {ClientID},
+		"client_id":     {clientID},
 		"code_verifier": {pkceCodes.CodeVerifier},
 	}
 	tokenData, err := a.postTokenForm(ctx, tokenEndpoint, form)
@@ -187,9 +204,13 @@ func (a *XAIAuth) RefreshTokens(ctx context.Context, refreshToken, tokenEndpoint
 		}
 		tokenEndpoint = discovery.TokenEndpoint
 	}
+	clientID, err := oauthClientID()
+	if err != nil {
+		return nil, err
+	}
 	form := url.Values{
 		"grant_type":    {"refresh_token"},
-		"client_id":     {ClientID},
+		"client_id":     {clientID},
 		"refresh_token": {strings.TrimSpace(refreshToken)},
 	}
 	return a.postTokenForm(ctx, tokenEndpoint, form)

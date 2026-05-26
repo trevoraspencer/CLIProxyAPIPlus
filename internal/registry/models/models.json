@@ -2324,19 +2324,5 @@
         ]
       }
     }
-  ],
-  "xai-oauth": [
-    {
-      "id": "grok-4.3",
-      "object": "model",
-      "created": 1776384000,
-      "owned_by": "xai",
-      "type": "xai-oauth",
-      "display_name": "Grok 4.3",
-      "name": "grok-4.3",
-      "description": "Grok 4.3 via xAI OAuth Responses API",
-      "context_length": 256000,
-      "max_completion_tokens": 64000
-    }
   ]
 }
