@@ -16,16 +16,19 @@ Date: 2026-05-26
 
 The original final-validation evidence commit (`b96b0550`) also added historical Factory documentation and validation artifacts for unrelated xAI, Z.AI, OpenCode, auth-docs, and docs-cleanup work. Those files are not DeepSeek final-validation evidence and are not claimed by this milestone.
 
-The cleanup feature intentionally removes these unrelated tracked artifact sets from the current DeepSeek evidence scope:
+The cleanup features intentionally remove these unrelated tracked artifact sets from the current DeepSeek evidence scope:
 
 - `.factory/docs/`
+- `.factory/research/provider-research.md`
 - `.factory/validation/auth-docs-refresh/`
 - `.factory/validation/docs-cleanup/`
 - `.factory/validation/opencode-go/`
 - `.factory/validation/opencode-zen/`
 - `.factory/validation/zai-coding-plan/`
 
-The retained `.factory/validation/deepseek-droid-compat/` scrutiny reports are current milestone audit artifacts and must stay available for the scrutiny rerun. The retained `.factory/init.sh`, `.factory/services.yaml`, `.factory/skills/`, `.factory/research/`, and `.factory/library/` files are mission infrastructure or DeepSeek milestone handoff context, not unrelated historical validation evidence.
+The removed `.factory/research/provider-research.md` file contained Z.AI, VibeProxy, and OpenCode Zen/Go research notes from unrelated provider work. It is historical, is not DeepSeek mission context, is not current milestone evidence, and is intentionally excluded rather than retained in the DeepSeek final-validation claim.
+
+The retained `.factory/validation/deepseek-droid-compat/` scrutiny reports are current milestone audit artifacts and must stay available for the scrutiny rerun. The retained `.factory/init.sh`, `.factory/services.yaml`, `.factory/skills/`, and `.factory/library/` files are mission infrastructure or DeepSeek milestone handoff context, not unrelated historical validation evidence. No `.factory/research/` artifact is retained or claimed as current DeepSeek evidence after this cleanup.
 
 This file now explicitly records the cleanup so final evidence describes every changed file set in this correction. The completion matrix below remains the final-validation handoff evidence for the DeepSeek milestone; the prior round-1 scrutiny report remains a failing audit record until scrutiny is rerun after this cleanup and the required fixes.
 
@@ -47,7 +50,7 @@ This file now explicitly records the cleanup so final evidence describes every c
 
 ## Changed Package to Validation Mapping
 
-The final validation handoff itself is this non-secret `.factory/library/` evidence/handoff file. The later cleanup feature changes this file and removes unrelated historical `.factory/docs/` plus non-DeepSeek `.factory/validation/` artifact directories listed in the scope-correction section above; it does not change Go packages. The Go implementation under validation was already present in the final tree and is covered by:
+The final validation handoff itself is this non-secret `.factory/library/` evidence/handoff file. The later cleanup features change this file and remove unrelated historical `.factory/docs/`, `.factory/research/provider-research.md`, plus non-DeepSeek `.factory/validation/` artifact directories listed in the scope-correction section above; they do not change Go packages. The Go implementation under validation was already present in the final tree and is covered by:
 
 - `./internal/runtime/executor`: E2, E6, E7, E1.
 - `./internal/watcher/synthesizer`, `./sdk/cliproxy`, `./internal/registry`, `./internal/api`, `./sdk/cliproxy/auth`: E3 and E1.
