@@ -268,6 +268,11 @@ type QuotaExceeded struct {
 
 // RoutingConfig configures how credentials are selected for requests.
 type RoutingConfig struct {
+	// OAuthModelAliasStrategy selects how model alias pools pick upstream models.
+	// Supported values: "round-robin" (default), "fill-first".
+	// When "fill-first", sessions are pinned to the first available model in the alias pool
+	// until exhausted, then fall through to the next pool member.
+	OAuthModelAliasStrategy string `yaml:"oauth-model-alias-strategy,omitempty" json:"oauth-model-alias-strategy,omitempty"`
 	// Strategy selects the credential selection strategy.
 	// Supported values: "round-robin" (default), "fill-first".
 	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"`
