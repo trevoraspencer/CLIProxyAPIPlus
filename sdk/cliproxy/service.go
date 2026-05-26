@@ -1292,6 +1292,10 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 				}
 				if strings.EqualFold(compat.Name, compatName) {
 					isCompatAuth = true
+					if !openAICompatAuthHasUsableCredential(a) {
+						GlobalModelRegistry().UnregisterClient(a.ID)
+						return
+					}
 					ms := buildOpenAICompatibilityConfigModels(compat)
 					// Register and return
 					if len(ms) > 0 {
@@ -1324,6 +1328,28 @@ func (s *Service) registerModelsForAuth(a *coreauth.Auth) {
 	}
 
 	GlobalModelRegistry().UnregisterClient(a.ID)
+}
+
+func openAICompatAuthHasUsableCredential(a *coreauth.Auth) bool {
+	if a == nil || a.Attributes == nil {
+		return false
+	}
+	if strings.TrimSpace(a.Attributes["api_key"]) != "" {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(a.Attributes["auth_kind"]), "api_key") ||
+		strings.EqualFold(strings.TrimSpace(a.Attributes["auth_kind"]), "apikey") {
+		return true
+	}
+	for key, value := range a.Attributes {
+		if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(key)), "header:") {
+			continue
+		}
+		if strings.TrimSpace(value) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // refreshModelRegistrationForAuth re-applies the latest model registration for
