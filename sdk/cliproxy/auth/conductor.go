@@ -212,10 +212,21 @@ func NewManager(store Store, selector Selector, hook Hook) *Manager {
 		modelPoolOffsets: make(map[string]int),
 	}
 	// atomic.Value requires non-nil initial value.
-	manager.runtimeConfig.Store(&internalconfig.Config{})
+	manager.runtimeConfig.Store(defaultManagerRuntimeConfig())
 	manager.apiKeyModelAlias.Store(apiKeyModelAliasTable(nil))
 	manager.scheduler = newAuthScheduler(selector)
 	return manager
+}
+
+func defaultManagerRuntimeConfig() *internalconfig.Config {
+	return &internalconfig.Config{
+		SDKConfig: internalconfig.SDKConfig{
+			CodexResponseHeaderTimeout:  30,
+			CodexTimeoutRetries:         2,
+			CodexTimeoutCooldownSeconds: 30,
+			DisableImageGeneration:      internalconfig.DisableImageGenerationOff,
+		},
+	}
 }
 
 func isBuiltInSelector(selector Selector) bool {
@@ -1343,26 +1354,47 @@ func (m *Manager) ExecuteStream(ctx context.Context, providers []string, req cli
 // Codex auths that experienced a timeout. Default is 30 seconds.
 func (m *Manager) codexTimeoutCooldownDuration() time.Duration {
 	cfg, _ := m.runtimeConfig.Load().(*internalconfig.Config)
-	if cfg != nil && cfg.CodexTimeoutCooldownSeconds > 0 {
-		return time.Duration(cfg.CodexTimeoutCooldownSeconds) * time.Second
+	if cfg == nil {
+		return 30 * time.Second
 	}
-	return 30 * time.Second
+	return time.Duration(cfg.CodexTimeoutCooldownSeconds) * time.Second
 }
 
 // codexTimeoutRetryLimit returns the maximum number of timeout-based retries
 // allowed for Codex requests. Default is 2. Returns 0 if retries are disabled.
 func (m *Manager) codexTimeoutRetryLimit() int {
 	cfg, _ := m.runtimeConfig.Load().(*internalconfig.Config)
-	if cfg != nil {
-		return cfg.CodexTimeoutRetries
+	if cfg == nil {
+		return 2
 	}
-	return 2
+	return cfg.CodexTimeoutRetries
 }
 
 // applyCodexTimeoutCooldown applies a temporary cooldown to an auth that
 // experienced a timeout, so the selector skips it for subsequent attempts.
-func (m *Manager) applyCodexTimeoutCooldown(auth *Auth, model string) {
-	ApplyTimeoutCooldown(auth, model, m.codexTimeoutCooldownDuration(), time.Now())
+func (m *Manager) applyCodexTimeoutCooldown(ctx context.Context, auth *Auth, model string) {
+	if auth == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cooldown := m.codexTimeoutCooldownDuration()
+	now := time.Now()
+	var authSnapshot *Auth
+	m.mu.Lock()
+	if current := m.auths[auth.ID]; current != nil {
+		ApplyTimeoutCooldown(current, model, cooldown, now)
+		current.UpdatedAt = now
+		_ = m.persist(ctx, current)
+		authSnapshot = current.Clone()
+	} else {
+		ApplyTimeoutCooldown(auth, model, cooldown, now)
+	}
+	m.mu.Unlock()
+	if m.scheduler != nil && authSnapshot != nil {
+		m.scheduler.upsertAuth(authSnapshot)
+	}
 }
 
 // isNetworkTimeoutError returns true if the error is a network timeout
@@ -1465,9 +1497,13 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 				}
 				m.MarkResult(execCtx, result)
 				if isNetworkTimeoutError(errExec) {
-					m.applyCodexTimeoutCooldown(auth, routeModel)
+					m.applyCodexTimeoutCooldown(execCtx, auth, routeModel)
 					codexTimeoutCount++
-					if m.codexTimeoutRetryLimit() > 0 && codexTimeoutCount > m.codexTimeoutRetryLimit() {
+					limit := m.codexTimeoutRetryLimit()
+					if limit == 0 {
+						return cliproxyexecutor.Response{}, errExec
+					}
+					if codexTimeoutCount > limit {
 						if lastErr != nil {
 							return cliproxyexecutor.Response{}, lastErr
 						}
@@ -1575,9 +1611,13 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 				}
 				m.MarkResult(execCtx, result)
 				if isNetworkTimeoutError(errExec) {
-					m.applyCodexTimeoutCooldown(auth, routeModel)
+					m.applyCodexTimeoutCooldown(execCtx, auth, routeModel)
 					codexTimeoutCount++
-					if m.codexTimeoutRetryLimit() > 0 && codexTimeoutCount > m.codexTimeoutRetryLimit() {
+					limit := m.codexTimeoutRetryLimit()
+					if limit == 0 {
+						return cliproxyexecutor.Response{}, errExec
+					}
+					if codexTimeoutCount > limit {
 						if lastErr != nil {
 							return cliproxyexecutor.Response{}, lastErr
 						}
@@ -1672,9 +1712,13 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 				return nil, errStream
 			}
 			if isNetworkTimeoutError(errStream) {
-				m.applyCodexTimeoutCooldown(auth, routeModel)
+				m.applyCodexTimeoutCooldown(execCtx, auth, routeModel)
 				codexTimeoutCount++
-				if m.codexTimeoutRetryLimit() > 0 && codexTimeoutCount > m.codexTimeoutRetryLimit() {
+				limit := m.codexTimeoutRetryLimit()
+				if limit == 0 {
+					return nil, errStream
+				}
+				if codexTimeoutCount > limit {
 					lastErr = errStream
 					if homeMode {
 						homeAuthCount++

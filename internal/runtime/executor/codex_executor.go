@@ -110,17 +110,17 @@ func withCodexTimingTrace(ctx context.Context, req *http.Request) (*codexTimingT
 }
 
 func (e *CodexExecutor) codexTimeoutCooldownDuration() time.Duration {
-	if e.cfg != nil && e.cfg.CodexTimeoutCooldownSeconds > 0 {
-		return time.Duration(e.cfg.CodexTimeoutCooldownSeconds) * time.Second
+	if e.cfg == nil {
+		return 30 * time.Second
 	}
-	return 60 * time.Second
+	return time.Duration(e.cfg.CodexTimeoutCooldownSeconds) * time.Second
 }
 
 func (e *CodexExecutor) codexTimeoutRetries() int {
-	if e.cfg != nil {
-		return e.cfg.CodexTimeoutRetries
+	if e.cfg == nil {
+		return 2
 	}
-	return 2
+	return e.cfg.CodexTimeoutRetries
 }
 
 var dataTag = []byte("data:")

@@ -436,9 +436,7 @@ func ApplyTimeoutCooldown(auth *Auth, model string, cooldown time.Duration, now 
 		return
 	}
 	if model == "" {
-		if !auth.Unavailable {
-			auth.NextRetryAfter = now.Add(cooldown)
-		}
+		auth.NextRetryAfter = now.Add(cooldown)
 		auth.Unavailable = true
 		return
 	}
@@ -450,9 +448,7 @@ func ApplyTimeoutCooldown(auth *Auth, model string, cooldown time.Duration, now 
 		state = &ModelState{}
 		auth.ModelStates[model] = state
 	}
-	if !state.Unavailable {
-		state.NextRetryAfter = now.Add(cooldown)
-	}
+	state.NextRetryAfter = now.Add(cooldown)
 	state.Unavailable = true
 }
 
