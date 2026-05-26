@@ -195,6 +195,50 @@ func newOpenAICompatPoolTestManager(t *testing.T, alias string, models []interna
 	return m
 }
 
+func newOpenAICompatFillFirstPoolTestManager(t *testing.T, alias string, executor *openAICompatPoolExecutor) *Manager {
+	t.Helper()
+	cfg := &internalconfig.Config{
+		Routing: internalconfig.RoutingConfig{OAuthModelAliasStrategy: "fill-first"},
+		OpenAICompatibility: []internalconfig.OpenAICompatibility{{
+			Name: "pool",
+			Models: []internalconfig.OpenAICompatibilityModel{
+				{Name: "deepseek-v3.1", Alias: alias},
+				{Name: "glm-5", Alias: alias},
+			},
+		}},
+	}
+	m := NewManager(nil, nil, nil)
+	m.SetConfig(cfg)
+	if executor == nil {
+		executor = &openAICompatPoolExecutor{id: "pool"}
+	}
+	m.RegisterExecutor(executor)
+
+	auth := &Auth{
+		ID:       "fill-first-pool-auth-" + t.Name(),
+		Provider: "pool",
+		Status:   StatusActive,
+		Attributes: map[string]string{
+			"api_key":      "test-key",
+			"compat_name":  "pool",
+			"provider_key": "pool",
+		},
+	}
+	if _, err := m.Register(context.Background(), auth); err != nil {
+		t.Fatalf("register auth: %v", err)
+	}
+
+	reg := registry.GetGlobalRegistry()
+	reg.RegisterClient(auth.ID, "pool", []*registry.ModelInfo{{ID: alias}})
+	t.Cleanup(func() {
+		reg.UnregisterClient(auth.ID)
+		if m.modelAliasSessionCache != nil {
+			m.modelAliasSessionCache.Stop()
+		}
+	})
+	return m
+}
+
 func readOpenAICompatStreamPayload(t *testing.T, streamResult *cliproxyexecutor.StreamResult) string {
 	t.Helper()
 	if streamResult == nil {
@@ -408,6 +452,97 @@ func TestManagerExecute_OpenAICompatAliasPoolFallsBackWithinSameAuth(t *testing.
 	}
 }
 
+func TestManagerExecute_OpenAICompatFillFirstAliasPoolFailsOverAndMovesPin(t *testing.T) {
+	alias := "claude-opus-4.66"
+	sessionID := "fill-first-session"
+	cacheSessionID := "header:" + sessionID
+	executor := &openAICompatPoolExecutor{id: "pool"}
+	m := newOpenAICompatFillFirstPoolTestManager(t, alias, executor)
+	opts := cliproxyexecutor.Options{Headers: http.Header{"X-Session-Id": {sessionID}}}
+
+	resp, err := m.Execute(context.Background(), []string{"pool"}, cliproxyexecutor.Request{Model: alias}, opts)
+	if err != nil {
+		t.Fatalf("initial execute: %v", err)
+	}
+	if string(resp.Payload) != "deepseek-v3.1" {
+		t.Fatalf("initial payload = %q, want deepseek-v3.1", string(resp.Payload))
+	}
+	if pinned, ok := m.modelAliasSessionCache.Get(cacheSessionID, alias); !ok || pinned != "deepseek-v3.1" {
+		t.Fatalf("initial pin = %q/%v, want deepseek-v3.1/true", pinned, ok)
+	}
+
+	executor.executeErrors = map[string]error{"deepseek-v3.1": &Error{HTTPStatus: http.StatusTooManyRequests, Message: "quota"}}
+	resp, err = m.Execute(context.Background(), []string{"pool"}, cliproxyexecutor.Request{Model: alias}, opts)
+	if err != nil {
+		t.Fatalf("fallback execute: %v", err)
+	}
+	if string(resp.Payload) != "glm-5" {
+		t.Fatalf("fallback payload = %q, want glm-5", string(resp.Payload))
+	}
+
+	auth, ok := m.GetByID("fill-first-pool-auth-" + t.Name())
+	if !ok || auth == nil {
+		t.Fatalf("expected auth to remain registered")
+	}
+	if state := auth.ModelStates["deepseek-v3.1"]; state == nil || !state.Unavailable || !state.Quota.Exceeded {
+		t.Fatalf("expected upstream deepseek-v3.1 quota state, got %+v", state)
+	}
+	if state := auth.ModelStates[alias]; state != nil && state.Unavailable {
+		t.Fatalf("alias model should not be marked unavailable; state=%+v", state)
+	}
+	if pinned, ok := m.modelAliasSessionCache.Get(cacheSessionID, alias); !ok || pinned != "glm-5" {
+		t.Fatalf("fallback pin = %q/%v, want glm-5/true", pinned, ok)
+	}
+
+	resp, err = m.Execute(context.Background(), []string{"pool"}, cliproxyexecutor.Request{Model: alias}, opts)
+	if err != nil {
+		t.Fatalf("post-fallback execute: %v", err)
+	}
+	if string(resp.Payload) != "glm-5" {
+		t.Fatalf("post-fallback payload = %q, want glm-5", string(resp.Payload))
+	}
+
+	want := []string{"deepseek-v3.1", "deepseek-v3.1", "glm-5", "glm-5"}
+	got := executor.ExecuteModels()
+	if len(got) != len(want) {
+		t.Fatalf("execute calls = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("execute call %d model = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestManagerExecute_OpenAICompatFillFirstAliasPoolModelUnsupportedTracksUpstream(t *testing.T) {
+	alias := "claude-opus-4.66"
+	sessionID := "fill-first-unsupported-session"
+	modelSupportErr := &Error{HTTPStatus: http.StatusBadRequest, Message: "invalid_request_error: The requested model is not supported."}
+	executor := &openAICompatPoolExecutor{
+		id:            "pool",
+		executeErrors: map[string]error{"deepseek-v3.1": modelSupportErr},
+	}
+	m := newOpenAICompatFillFirstPoolTestManager(t, alias, executor)
+
+	resp, err := m.Execute(context.Background(), []string{"pool"}, cliproxyexecutor.Request{Model: alias}, cliproxyexecutor.Options{Headers: http.Header{"X-Session-Id": {sessionID}}})
+	if err != nil {
+		t.Fatalf("execute error = %v, want fallback success", err)
+	}
+	if string(resp.Payload) != "glm-5" {
+		t.Fatalf("payload = %q, want glm-5", string(resp.Payload))
+	}
+	auth, ok := m.GetByID("fill-first-pool-auth-" + t.Name())
+	if !ok || auth == nil {
+		t.Fatalf("expected auth to remain registered")
+	}
+	if state := auth.ModelStates["deepseek-v3.1"]; state == nil || !state.Unavailable || state.NextRetryAfter.IsZero() {
+		t.Fatalf("expected upstream deepseek-v3.1 suspension, got %+v", state)
+	}
+	if state := auth.ModelStates[alias]; state != nil && state.Unavailable {
+		t.Fatalf("alias model should not be marked unavailable; state=%+v", state)
+	}
+}
+
 func TestManagerExecuteStream_OpenAICompatAliasPoolRetriesOnEmptyBootstrap(t *testing.T) {
 	alias := "claude-opus-4.66"
 	executor := &openAICompatPoolExecutor{
@@ -478,6 +613,48 @@ func TestManagerExecuteStream_OpenAICompatAliasPoolFallsBackBeforeFirstByte(t *t
 	}
 	if gotHeader := streamResult.Headers.Get("X-Model"); gotHeader != "glm-5" {
 		t.Fatalf("header X-Model = %q, want %q", gotHeader, "glm-5")
+	}
+}
+
+func TestManagerExecuteStream_OpenAICompatFillFirstAliasPoolFallbackMovesPinAfterStreamSuccess(t *testing.T) {
+	alias := "claude-opus-4.66"
+	sessionID := "fill-first-stream-session"
+	cacheSessionID := "header:" + sessionID
+	executor := &openAICompatPoolExecutor{
+		id:                "pool",
+		streamFirstErrors: map[string]error{"deepseek-v3.1": &Error{HTTPStatus: http.StatusTooManyRequests, Message: "quota"}},
+	}
+	m := newOpenAICompatFillFirstPoolTestManager(t, alias, executor)
+	m.modelAliasSessionCache.Set(cacheSessionID, alias, "deepseek-v3.1")
+
+	streamResult, err := m.ExecuteStream(context.Background(), []string{"pool"}, cliproxyexecutor.Request{Model: alias}, cliproxyexecutor.Options{Headers: http.Header{"X-Session-Id": {sessionID}}})
+	if err != nil {
+		t.Fatalf("execute stream: %v", err)
+	}
+	if payload := readOpenAICompatStreamPayload(t, streamResult); payload != "glm-5" {
+		t.Fatalf("stream payload = %q, want glm-5", payload)
+	}
+	if pinned, ok := m.modelAliasSessionCache.Get(cacheSessionID, alias); !ok || pinned != "glm-5" {
+		t.Fatalf("stream pin = %q/%v, want glm-5/true", pinned, ok)
+	}
+
+	streamResult, err = m.ExecuteStream(context.Background(), []string{"pool"}, cliproxyexecutor.Request{Model: alias}, cliproxyexecutor.Options{Headers: http.Header{"X-Session-Id": {sessionID}}})
+	if err != nil {
+		t.Fatalf("second execute stream: %v", err)
+	}
+	if payload := readOpenAICompatStreamPayload(t, streamResult); payload != "glm-5" {
+		t.Fatalf("second stream payload = %q, want glm-5", payload)
+	}
+
+	want := []string{"deepseek-v3.1", "glm-5", "glm-5"}
+	got := executor.StreamModels()
+	if len(got) != len(want) {
+		t.Fatalf("stream calls = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("stream call %d model = %q, want %q", i, got[i], want[i])
+		}
 	}
 }
 
@@ -600,6 +777,48 @@ func TestManagerExecuteCount_OpenAICompatAliasPoolRotatesWithinAuth(t *testing.T
 
 	got := executor.CountModels()
 	want := []string{"deepseek-v3.1", "glm-5"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("count call %d model = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestManagerExecuteCount_OpenAICompatFillFirstAliasPoolFailsOverAndMovesPin(t *testing.T) {
+	alias := "claude-opus-4.66"
+	sessionID := "fill-first-count-session"
+	cacheSessionID := "header:" + sessionID
+	executor := &openAICompatPoolExecutor{
+		id:          "pool",
+		countErrors: map[string]error{"deepseek-v3.1": &Error{HTTPStatus: http.StatusTooManyRequests, Message: "quota"}},
+	}
+	m := newOpenAICompatFillFirstPoolTestManager(t, alias, executor)
+	m.modelAliasSessionCache.Set(cacheSessionID, alias, "deepseek-v3.1")
+
+	resp, err := m.ExecuteCount(context.Background(), []string{"pool"}, cliproxyexecutor.Request{Model: alias}, cliproxyexecutor.Options{Headers: http.Header{"X-Session-Id": {sessionID}}})
+	if err != nil {
+		t.Fatalf("execute count: %v", err)
+	}
+	if string(resp.Payload) != "glm-5" {
+		t.Fatalf("count payload = %q, want glm-5", string(resp.Payload))
+	}
+	if pinned, ok := m.modelAliasSessionCache.Get(cacheSessionID, alias); !ok || pinned != "glm-5" {
+		t.Fatalf("count pin = %q/%v, want glm-5/true", pinned, ok)
+	}
+
+	resp, err = m.ExecuteCount(context.Background(), []string{"pool"}, cliproxyexecutor.Request{Model: alias}, cliproxyexecutor.Options{Headers: http.Header{"X-Session-Id": {sessionID}}})
+	if err != nil {
+		t.Fatalf("second execute count: %v", err)
+	}
+	if string(resp.Payload) != "glm-5" {
+		t.Fatalf("second count payload = %q, want glm-5", string(resp.Payload))
+	}
+
+	want := []string{"deepseek-v3.1", "glm-5", "glm-5"}
+	got := executor.CountModels()
+	if len(got) != len(want) {
+		t.Fatalf("count calls = %v, want %v", got, want)
+	}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("count call %d model = %q, want %q", i, got[i], want[i])

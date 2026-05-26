@@ -575,17 +575,17 @@ func preserveRequestedModelSuffix(requestedModel, resolved string) string {
 	return preserveResolvedModelSuffix(resolved, thinking.ParseSuffix(requestedModel))
 }
 
-func (m *Manager) executionModelCandidates(auth *Auth, routeModel string, sessionID string) []string {
+func (m *Manager) executionModelCandidates(auth *Auth, routeModel string, sessionID string) ([]string, bool) {
 	if auth != nil && auth.Attributes != nil {
 		if homeModel := strings.TrimSpace(auth.Attributes[homeUpstreamModelAttributeKey]); homeModel != "" {
-			return []string{homeModel}
+			return []string{homeModel}, false
 		}
 	}
 	requestedModel := rewriteModelForAuth(routeModel, auth)
 	requestedModel = m.applyOAuthModelAlias(auth, requestedModel)
 	if pool := m.resolveOpenAICompatUpstreamModelPool(auth, requestedModel); len(pool) > 0 {
 		if len(pool) == 1 {
-			return pool
+			return pool, false
 		}
 
 		// Apply fill-first model alias strategy if configured.
@@ -594,31 +594,27 @@ func (m *Manager) executionModelCandidates(auth *Auth, routeModel string, sessio
 			if cache != nil {
 				if pinnedModel, ok := cache.Get(sessionID, requestedModel); ok {
 					// Check if pinned model is still in the pool.
-					for _, m := range pool {
-						if strings.EqualFold(strings.TrimSpace(m), strings.TrimSpace(pinnedModel)) {
-							return []string{m}
+					for index, model := range pool {
+						if strings.EqualFold(strings.TrimSpace(model), strings.TrimSpace(pinnedModel)) {
+							return rotateStrings(pool, index), true
 						}
 					}
 					// Pinned model is no longer in the pool; clear pin and fall through.
 					cache.Invalidate(sessionID, requestedModel)
 				}
-				// Pin to the first model in the pool.
-				if len(pool) > 0 {
-					cache.Set(sessionID, requestedModel, pool[0])
-					return []string{pool[0]}
-				}
+				return rotateStrings(pool, 0), true
 			}
 		}
 
 		// Default round-robin behavior.
 		offset := m.nextModelPoolOffset(openAICompatModelPoolKey(auth, requestedModel), len(pool))
-		return rotateStrings(pool, offset)
+		return rotateStrings(pool, offset), true
 	}
 	resolved := m.applyAPIKeyModelAlias(auth, requestedModel)
 	if strings.TrimSpace(resolved) == "" {
 		resolved = requestedModel
 	}
-	return []string{resolved}
+	return []string{resolved}, false
 }
 
 // shouldUseFillFirstModelAlias reports whether the oauth-model-alias-strategy
@@ -638,6 +634,47 @@ func (m *Manager) invalidateModelAliasPin(sessionID, aliasName string) {
 	if m.modelAliasSessionCache != nil && sessionID != "" {
 		m.modelAliasSessionCache.Invalidate(sessionID, aliasName)
 	}
+}
+
+func (m *Manager) invalidateModelAliasPinForRoute(sessionID, routeModel string) {
+	if m == nil || !m.shouldUseFillFirstModelAlias() || sessionID == "" {
+		return
+	}
+	routeModel = strings.TrimSpace(routeModel)
+	if routeModel == "" {
+		return
+	}
+	m.invalidateModelAliasPin(sessionID, routeModel)
+	if index := strings.LastIndex(routeModel, "/"); index >= 0 && index < len(routeModel)-1 {
+		m.invalidateModelAliasPin(sessionID, routeModel[index+1:])
+	}
+}
+
+func (m *Manager) modelAliasPinName(auth *Auth, routeModel string) string {
+	requestedModel := rewriteModelForAuth(routeModel, auth)
+	requestedModel = m.applyOAuthModelAlias(auth, requestedModel)
+	return strings.TrimSpace(requestedModel)
+}
+
+func (m *Manager) invalidateModelAliasPinForAuth(sessionID string, auth *Auth, routeModel string) {
+	if m == nil || !m.shouldUseFillFirstModelAlias() || sessionID == "" {
+		return
+	}
+	if aliasName := m.modelAliasPinName(auth, routeModel); aliasName != "" {
+		m.invalidateModelAliasPin(sessionID, aliasName)
+	}
+}
+
+func (m *Manager) setModelAliasPinForAuth(sessionID string, auth *Auth, routeModel, upstreamModel string, pooled bool) {
+	if m == nil || !pooled || !m.shouldUseFillFirstModelAlias() || sessionID == "" || m.modelAliasSessionCache == nil {
+		return
+	}
+	aliasName := m.modelAliasPinName(auth, routeModel)
+	upstreamModel = strings.TrimSpace(upstreamModel)
+	if aliasName == "" || upstreamModel == "" {
+		return
+	}
+	m.modelAliasSessionCache.Set(sessionID, aliasName, upstreamModel)
 }
 
 func (m *Manager) selectionModelForAuth(auth *Auth, routeModel string) string {
@@ -703,8 +740,7 @@ func (m *Manager) filterExecutionModels(auth *Auth, routeModel string, candidate
 }
 
 func (m *Manager) preparedExecutionModels(auth *Auth, routeModel string, sessionID string) ([]string, bool) {
-	candidates := m.executionModelCandidates(auth, routeModel, sessionID)
-	pooled := len(candidates) > 1
+	candidates, pooled := m.executionModelCandidates(auth, routeModel, sessionID)
 	return m.filterExecutionModels(auth, routeModel, candidates, pooled), pooled
 }
 
@@ -885,7 +921,7 @@ func readStreamBootstrap(ctx context.Context, ch <-chan cliproxyexecutor.StreamC
 	}
 }
 
-func (m *Manager) wrapStreamResult(ctx context.Context, auth *Auth, provider, resultModel string, headers http.Header, buffered []cliproxyexecutor.StreamChunk, remaining <-chan cliproxyexecutor.StreamChunk) *cliproxyexecutor.StreamResult {
+func (m *Manager) wrapStreamResult(ctx context.Context, auth *Auth, provider, resultModel string, headers http.Header, buffered []cliproxyexecutor.StreamChunk, remaining <-chan cliproxyexecutor.StreamChunk, sessionID, routeModel, upstreamModel string, pooled bool) *cliproxyexecutor.StreamResult {
 	out := make(chan cliproxyexecutor.StreamChunk)
 	go func() {
 		defer close(out)
@@ -929,12 +965,13 @@ func (m *Manager) wrapStreamResult(ctx context.Context, auth *Auth, provider, re
 		}
 		if !failed {
 			m.MarkResult(ctx, Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: true})
+			m.setModelAliasPinForAuth(sessionID, auth, routeModel, upstreamModel, pooled)
 		}
 	}()
 	return &cliproxyexecutor.StreamResult{Headers: headers, Chunks: out}
 }
 
-func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor ProviderExecutor, auth *Auth, provider string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, routeModel string, execModels []string, pooled bool) (*cliproxyexecutor.StreamResult, error) {
+func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor ProviderExecutor, auth *Auth, provider string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, routeModel string, execModels []string, pooled bool, sessionID string) (*cliproxyexecutor.StreamResult, error) {
 	if executor == nil {
 		return nil, &Error{Code: "executor_not_found", Message: "executor not registered"}
 	}
@@ -1028,7 +1065,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 			close(closedCh)
 			remaining = closedCh
 		}
-		return m.wrapStreamResult(ctx, auth.Clone(), provider, resultModel, streamResult.Headers, buffered, remaining), nil
+		return m.wrapStreamResult(ctx, auth.Clone(), provider, resultModel, streamResult.Headers, buffered, remaining, sessionID, routeModel, execModel, pooled), nil
 	}
 	if lastErr == nil {
 		lastErr = &Error{Code: "auth_not_found", Message: "no upstream model available"}
@@ -1495,8 +1532,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 		}
 		auth, executor, provider, errPick := m.pickNextMixed(ctx, providers, routeModel, pickOpts, tried)
 		if errPick != nil {
-			// Invalidate fill-first model alias pin so the next request tries a different pool member.
-			m.invalidateModelAliasPin(sessionID, routeModel)
+			m.invalidateModelAliasPinForRoute(sessionID, routeModel)
 			if shouldReturnLastErrorOnPickFailure(homeMode, lastErr, errPick) {
 				return cliproxyexecutor.Response{}, lastErr
 			}
@@ -1579,12 +1615,14 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 				continue
 			}
 			m.MarkResult(execCtx, result)
+			m.setModelAliasPinForAuth(sessionID, auth, routeModel, upstreamModel, pooled)
 			return resp, nil
 		}
 		if authErr != nil {
 			if isRequestInvalidError(authErr) {
 				return cliproxyexecutor.Response{}, authErr
 			}
+			m.invalidateModelAliasPinForAuth(sessionID, auth, routeModel)
 			lastErr = authErr
 			if homeMode {
 				homeAuthCount++
@@ -1620,8 +1658,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 		}
 		auth, executor, provider, errPick := m.pickNextMixed(ctx, providers, routeModel, pickOpts, tried)
 		if errPick != nil {
-			// Invalidate fill-first model alias pin so the next request tries a different pool member.
-			m.invalidateModelAliasPin(sessionID, routeModel)
+			m.invalidateModelAliasPinForRoute(sessionID, routeModel)
 			if shouldReturnLastErrorOnPickFailure(homeMode, lastErr, errPick) {
 				return cliproxyexecutor.Response{}, lastErr
 			}
@@ -1696,12 +1733,14 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 				continue
 			}
 			m.MarkResult(execCtx, result)
+			m.setModelAliasPinForAuth(sessionID, auth, routeModel, upstreamModel, pooled)
 			return resp, nil
 		}
 		if authErr != nil {
 			if isRequestInvalidError(authErr) {
 				return cliproxyexecutor.Response{}, authErr
 			}
+			m.invalidateModelAliasPinForAuth(sessionID, auth, routeModel)
 			lastErr = authErr
 			if homeMode {
 				homeAuthCount++
@@ -1737,6 +1776,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 		}
 		auth, executor, provider, errPick := m.pickNextMixed(ctx, providers, routeModel, pickOpts, tried)
 		if errPick != nil {
+			m.invalidateModelAliasPinForRoute(sessionID, routeModel)
 			if shouldReturnLastErrorOnPickFailure(homeMode, lastErr, errPick) {
 				return nil, lastErr
 			}
@@ -1769,7 +1809,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 			lastErr = errPrepare
 			continue
 		}
-		streamResult, errStream := m.executeStreamWithModelPool(execCtx, executor, auth, provider, req, opts, routeModel, models, pooled)
+		streamResult, errStream := m.executeStreamWithModelPool(execCtx, executor, auth, provider, req, opts, routeModel, models, pooled, sessionID)
 		if errStream != nil {
 			if errCtx := execCtx.Err(); errCtx != nil {
 				return nil, errCtx
@@ -1792,6 +1832,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 					continue
 				}
 			}
+			m.invalidateModelAliasPinForAuth(sessionID, auth, routeModel)
 			lastErr = errStream
 			if homeMode {
 				homeAuthCount++
@@ -4067,12 +4108,12 @@ func (m *Manager) tryAntigravityCreditsExecute(ctx context.Context, req cliproxy
 		}
 		c.auth = preparedAuth
 		publishSelectedAuthMetadata(creditsOpts.Metadata, c.auth.ID)
-		models := m.executionModelCandidates(c.auth, routeModel, sessionID)
+		models, pooled := m.executionModelCandidates(c.auth, routeModel, sessionID)
 		if len(models) == 0 {
 			continue
 		}
 		for _, upstreamModel := range models {
-			resultModel := m.stateModelForExecution(c.auth, routeModel, upstreamModel, len(models) > 1)
+			resultModel := m.stateModelForExecution(c.auth, routeModel, upstreamModel, pooled)
 			execReq := req
 			execReq.Model = upstreamModel
 			resp, errExec := c.executor.Execute(creditsCtx, c.auth, execReq, creditsOpts)
@@ -4089,6 +4130,7 @@ func (m *Manager) tryAntigravityCreditsExecute(ctx context.Context, req cliproxy
 				continue
 			}
 			m.MarkResult(creditsCtx, result)
+			m.setModelAliasPinForAuth(sessionID, c.auth, routeModel, upstreamModel, pooled)
 			return resp, true
 		}
 	}
@@ -4115,11 +4157,11 @@ func (m *Manager) tryAntigravityCreditsExecuteStream(ctx context.Context, req cl
 		}
 		c.auth = preparedAuth
 		publishSelectedAuthMetadata(creditsOpts.Metadata, c.auth.ID)
-		models := m.executionModelCandidates(c.auth, routeModel, sessionID)
+		models, pooled := m.executionModelCandidates(c.auth, routeModel, sessionID)
 		if len(models) == 0 {
 			continue
 		}
-		result, errStream := m.executeStreamWithModelPool(creditsCtx, c.executor, c.auth, c.provider, req, creditsOpts, routeModel, models, len(models) > 1)
+		result, errStream := m.executeStreamWithModelPool(creditsCtx, c.executor, c.auth, c.provider, req, creditsOpts, routeModel, models, pooled, sessionID)
 		if errStream != nil {
 			continue
 		}

@@ -120,6 +120,78 @@ func TestDeepSeekKeyToolCallIDsAreOrderIndependentAndScoped(t *testing.T) {
 	}
 }
 
+func TestDeepSeekCacheRequiresStableSession(t *testing.T) {
+	scope := deepSeekReasoningScope{Provider: "openai-compatibility", Auth: "auth-a", Model: "deepseek-chat"}
+	message := mustJSONMap(t, `{"role":"assistant","tool_calls":[{"id":"call-1","type":"function","function":{"name":"edit","arguments":"{}"}}]}`)
+	key := deepSeekReasoningKeyForMessage(scope, message)
+	if key.valid() {
+		t.Fatalf("key without session is valid: %+v", key)
+	}
+
+	cache := newDeepSeekReasoningCache(10, time.Minute)
+	cache.Store(key, "must not store")
+	if cache.Len() != 0 {
+		t.Fatalf("cache stored reasoning without session; len=%d", cache.Len())
+	}
+	if _, ok := cache.Lookup(key); ok {
+		t.Fatalf("cache lookup succeeded without session")
+	}
+
+	payload := []byte(`{"model":"deepseek-chat","messages":[{"role":"assistant","tool_calls":[{"id":"call-1","type":"function","function":{"name":"edit","arguments":"{}"}}]}]}`)
+	patched := deepSeekPatchRequestReasoning(payload, scope, cache)
+	if string(patched) != string(payload) {
+		t.Fatalf("sessionless cache miss changed payload: got %s want %s", string(patched), string(payload))
+	}
+
+	deepSeekCaptureNonStreamReasoning([]byte(`{"choices":[{"message":{"role":"assistant","reasoning_content":"secret","tool_calls":[{"id":"call-1","type":"function","function":{"name":"edit","arguments":"{}"}}]}}]}`), scope, cache)
+	if cache.Len() != 0 {
+		t.Fatalf("sessionless non-stream capture populated cache; len=%d", cache.Len())
+	}
+}
+
+func TestDeepSeekStableSessionIDSourcesNoHashFallback(t *testing.T) {
+	exec := NewOpenAICompatExecutor("openai-compatibility", nil)
+	auth := &cliproxyauth.Auth{ID: "auth-a", Provider: "openai-compatibility"}
+	payload := []byte(`{"metadata":{"user_id":"user_a_account__session_payload"},"conversation_id":"conv-payload","messages":[{"role":"user","content":"hello"}]}`)
+
+	scope := deepSeekReasoningScopeFor(exec, auth, "deepseek-chat", payload, cliproxyexecutor.Options{
+		SourceFormat: sdktranslator.FromString("openai"),
+		Metadata:     map[string]any{cliproxyexecutor.ExecutionSessionMetadataKey: "meta-session"},
+	})
+	if scope.Session != "meta-session" {
+		t.Fatalf("metadata session = %q, want meta-session", scope.Session)
+	}
+
+	scope = deepSeekReasoningScopeFor(exec, auth, "deepseek-chat", payload, cliproxyexecutor.Options{
+		SourceFormat: sdktranslator.FromString("openai"),
+		Headers:      http.Header{"X-Session-Id": {"header-session"}},
+	})
+	if scope.Session != "header-session" {
+		t.Fatalf("header session = %q, want header-session", scope.Session)
+	}
+
+	scope = deepSeekReasoningScopeFor(exec, auth, "deepseek-chat", payload, cliproxyexecutor.Options{
+		SourceFormat: sdktranslator.FromString("openai"),
+	})
+	if scope.Session != "user_a_account__session_payload" {
+		t.Fatalf("payload metadata.user_id session = %q, want user_a_account__session_payload", scope.Session)
+	}
+
+	scope = deepSeekReasoningScopeFor(exec, auth, "deepseek-chat", []byte(`{"conversation_id":"conv-only","messages":[{"role":"user","content":"hello"}]}`), cliproxyexecutor.Options{
+		SourceFormat: sdktranslator.FromString("openai"),
+	})
+	if scope.Session != "conv-only" {
+		t.Fatalf("conversation_id session = %q, want conv-only", scope.Session)
+	}
+
+	scope = deepSeekReasoningScopeFor(exec, auth, "deepseek-chat", []byte(`{"messages":[{"role":"user","content":"hello"}]}`), cliproxyexecutor.Options{
+		SourceFormat: sdktranslator.FromString("openai"),
+	})
+	if scope.Session != "" {
+		t.Fatalf("message-hash fallback should not be used for DeepSeek replay; got %q", scope.Session)
+	}
+}
+
 func TestDeepSeekPatchEligibleAssistantToolCallsOnly(t *testing.T) {
 	cache := newDeepSeekReasoningCache(10, time.Minute)
 	scope := deepSeekReasoningScope{Provider: "openai-compatibility", Auth: "auth-a", Model: "deepseek-chat", Session: "session-a"}

@@ -714,7 +714,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 	}
 	// Wrap response body with first-event timeout to prevent hangs
 	// when upstream never sends the first SSE event.
-	httpResp.Body = newCodexFirstEventReader(httpResp.Body, e.codexResponseHeaderTimeout())
+	httpResp.Body = wrapCodexFirstEventReader(httpResp.Body, e.codexResponseHeaderTimeout())
 	out := make(chan cliproxyexecutor.StreamChunk)
 	go func() {
 		defer close(out)
@@ -1298,10 +1298,10 @@ func (e *CodexExecutor) resolveCodexConfig(auth *cliproxyauth.Auth) *config.Code
 // codexResponseHeaderTimeout returns the configured response header timeout
 // for Codex OAuth /responses requests. Defaults to 30 seconds.
 func (e *CodexExecutor) codexResponseHeaderTimeout() time.Duration {
-	if e.cfg != nil && e.cfg.CodexResponseHeaderTimeout > 0 {
-		return time.Duration(e.cfg.CodexResponseHeaderTimeout) * time.Second
+	if e.cfg == nil {
+		return 30 * time.Second
 	}
-	return 30 * time.Second
+	return time.Duration(e.cfg.CodexResponseHeaderTimeout) * time.Second
 }
 
 // isCodexTimeoutError returns true if the error is a network timeout,
@@ -1319,6 +1319,9 @@ func isCodexTimeoutError(err error) bool {
 // ResponseHeaderTimeout to prevent indefinite hangs when upstream never sends
 // response headers. It clones the transport to avoid mutating cached transports.
 func ensureCodexResponseHeaderTimeout(httpClient *http.Client, timeout time.Duration) {
+	if httpClient == nil || timeout <= 0 {
+		return
+	}
 	var baseTransport *http.Transport
 
 	if httpClient.Transport == nil {
@@ -1350,6 +1353,13 @@ type codexFirstEventReader struct {
 
 func newCodexFirstEventReader(rc io.ReadCloser, timeout time.Duration) *codexFirstEventReader {
 	return &codexFirstEventReader{rc: rc, timeout: timeout, first: true}
+}
+
+func wrapCodexFirstEventReader(rc io.ReadCloser, timeout time.Duration) io.ReadCloser {
+	if rc == nil || timeout <= 0 {
+		return rc
+	}
+	return newCodexFirstEventReader(rc, timeout)
 }
 
 func (r *codexFirstEventReader) Read(p []byte) (int, error) {

@@ -134,7 +134,7 @@ func (c *deepSeekReasoningCache) evictLocked(now time.Time) {
 }
 
 func (k deepSeekReasoningKey) valid() bool {
-	return k.Provider != "" && k.Auth != "" && k.Model != "" && (k.ToolCallIDs != "" || (k.Session != "" && k.TurnHash != ""))
+	return k.Provider != "" && k.Auth != "" && k.Model != "" && k.Session != "" && (k.ToolCallIDs != "" || k.TurnHash != "")
 }
 
 func (e *OpenAICompatExecutor) deepSeekReasoningEnabled(auth *cliproxyauth.Auth, baseURL string) bool {
@@ -186,7 +186,7 @@ func deepSeekBaseURL(raw string) bool {
 	return ok
 }
 
-func deepSeekReasoningScopeFor(e *OpenAICompatExecutor, auth *cliproxyauth.Auth, model string, opts cliproxyexecutor.Options) deepSeekReasoningScope {
+func deepSeekReasoningScopeFor(e *OpenAICompatExecutor, auth *cliproxyauth.Auth, model string, payload []byte, opts cliproxyexecutor.Options) deepSeekReasoningScope {
 	provider := strings.ToLower(strings.TrimSpace(e.provider))
 	if provider == "" && auth != nil {
 		provider = strings.ToLower(strings.TrimSpace(auth.Provider))
@@ -201,18 +201,39 @@ func deepSeekReasoningScopeFor(e *OpenAICompatExecutor, auth *cliproxyauth.Auth,
 			authScope = auth.EnsureIndex()
 		}
 	}
-	session := ""
-	if opts.Metadata != nil {
-		if raw, ok := opts.Metadata[cliproxyexecutor.ExecutionSessionMetadataKey]; ok {
-			session = strings.TrimSpace(stringFromAny(raw))
-		}
-	}
 	return deepSeekReasoningScope{
 		Provider: provider,
 		Auth:     authScope,
 		Model:    strings.TrimSpace(model),
-		Session:  session,
+		Session:  deepSeekStableSessionID(payload, opts),
 	}
+}
+
+func deepSeekStableSessionID(payload []byte, opts cliproxyexecutor.Options) string {
+	if opts.Metadata != nil {
+		if raw, ok := opts.Metadata[cliproxyexecutor.ExecutionSessionMetadataKey]; ok {
+			if session := strings.TrimSpace(stringFromAny(raw)); session != "" {
+				return session
+			}
+		}
+	}
+	for _, header := range []string{"X-Session-ID", "Session_id", "X-Amp-Thread-Id", "X-Client-Request-Id"} {
+		if session := strings.TrimSpace(opts.Headers.Get(header)); session != "" {
+			return session
+		}
+	}
+	for _, source := range [][]byte{opts.OriginalRequest, payload} {
+		if len(source) == 0 {
+			continue
+		}
+		if session := strings.TrimSpace(gjson.GetBytes(source, "metadata.user_id").String()); session != "" {
+			return session
+		}
+		if session := strings.TrimSpace(gjson.GetBytes(source, "conversation_id").String()); session != "" {
+			return session
+		}
+	}
+	return ""
 }
 
 func stringFromAny(raw any) string {

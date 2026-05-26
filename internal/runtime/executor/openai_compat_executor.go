@@ -130,7 +130,7 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 	deepSeekReasoning := endpoint == "/chat/completions" && e.deepSeekReasoningEnabled(auth, baseURL)
 	var deepSeekScope deepSeekReasoningScope
 	if deepSeekReasoning {
-		deepSeekScope = deepSeekReasoningScopeFor(e, auth, deepSeekFinalPayloadModel(translated, baseModel), opts)
+		deepSeekScope = deepSeekReasoningScopeFor(e, auth, deepSeekFinalPayloadModel(translated, baseModel), originalPayloadSource, opts)
 		translated = deepSeekPatchRequestReasoning(translated, deepSeekScope, defaultDeepSeekReasoningCache)
 	}
 
@@ -334,7 +334,7 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 	deepSeekReasoning := e.deepSeekReasoningEnabled(auth, baseURL)
 	var deepSeekScope deepSeekReasoningScope
 	if deepSeekReasoning {
-		deepSeekScope = deepSeekReasoningScopeFor(e, auth, deepSeekFinalPayloadModel(translated, baseModel), opts)
+		deepSeekScope = deepSeekReasoningScopeFor(e, auth, deepSeekFinalPayloadModel(translated, baseModel), originalPayloadSource, opts)
 		translated = deepSeekPatchRequestReasoning(translated, deepSeekScope, defaultDeepSeekReasoningCache)
 	}
 
