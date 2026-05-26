@@ -18,6 +18,10 @@ type SDKConfig struct {
 	//   - "chat": disable image_generation injection for all non-images endpoints (e.g. /v1/responses, /v1/chat/completions),
 	//     while keeping /v1/images/generations and /v1/images/edits enabled and preserving image_generation there.
 	DisableImageGeneration DisableImageGenerationMode `yaml:"disable-image-generation" json:"disable-image-generation"`
+	// CodexResponseHeaderTimeout specifies the maximum duration in seconds to wait for
+	// a response header (and first SSE event in streaming mode) from Codex OAuth upstream.
+	// Default is 30 seconds. Set to 0 to disable the timeout.
+	CodexResponseHeaderTimeout int `yaml:"codex-response-header-timeout" json:"codex-response-header-timeout"`
 
 	// EnableGeminiCLIEndpoint controls whether Gemini CLI internal endpoints (/v1internal:*) are enabled.
 	// Default is false for safety; when false, /v1internal:* requests are rejected.
