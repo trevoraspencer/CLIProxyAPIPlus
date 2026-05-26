@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
+	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 )
 
@@ -317,5 +319,199 @@ func TestDeepSeekOpenAICompatStreamCaptureObservationOnlyAndErrorsDoNotCommit(t 
 	}
 	if got := defaultDeepSeekReasoningCache.Len(); got != 0 {
 		t.Fatalf("error stream populated cache, Len=%d", got)
+	}
+}
+
+func TestOpenAICompatNonDeepSeekDeepSeekModelPassThroughWithPrepopulatedCache(t *testing.T) {
+	oldCache := defaultDeepSeekReasoningCache
+	defaultDeepSeekReasoningCache = newDeepSeekReasoningCache(time.Minute, 16)
+	t.Cleanup(func() { defaultDeepSeekReasoningCache = oldCache })
+
+	deepSeekIdentity := deepSeekCompatIdentity{Enabled: true, Provider: "deepseek", AuthScope: "id:auth-a", Model: "deepseek-chat"}
+	if !defaultDeepSeekReasoningCache.Put(deepSeekIdentity, deepSeekReasoningTurn{Reasoning: "cached reasoning must not leak", ToolCallIDs: []string{"call-nondeepseek"}}) {
+		t.Fatal("expected prepopulated DeepSeek cache entry")
+	}
+
+	var gotBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = append([]byte(nil), body...)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl_1","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":null,"reasoning_content":"upstream aggregator reasoning is preserved","tool_calls":[{"id":"call-response","type":"function","function":{"name":"edit","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`))
+	}))
+	defer server.Close()
+
+	gin.SetMode(gin.TestMode)
+	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctxWithGin := context.WithValue(context.Background(), "gin", ginCtx)
+	executor := NewOpenAICompatExecutor("openai-compatibility", &config.Config{
+		SDKConfig:           config.SDKConfig{RequestLog: true},
+		OpenAICompatibility: []config.OpenAICompatibility{{Name: "openrouter", BaseURL: server.URL + "/v1"}},
+	})
+	auth := &cliproxyauth.Auth{ID: "auth-a", Provider: "openai-compatibility", Attributes: map[string]string{
+		"compat_name": "openrouter",
+		"base_url":    server.URL + "/v1",
+		"api_key":     "synthetic-key",
+	}}
+	payload := []byte(`{"model":"deepseek-chat","messages":[{"role":"assistant","content":null,"tool_calls":[{"id":"call-nondeepseek","type":"function","function":{"name":"edit","arguments":"{}"}}]},{"role":"user","content":"continue"}]}`)
+	resp, err := executor.Execute(ctxWithGin, auth, cliproxyexecutor.Request{Model: "deepseek-chat", Payload: payload}, cliproxyexecutor.Options{SourceFormat: sdktranslator.FromString("openai")})
+	if err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	if gjson.GetBytes(gotBody, "messages.0.reasoning_content").Exists() {
+		t.Fatalf("non-DeepSeek request was patched: %s", gotBody)
+	}
+	if !strings.Contains(string(resp.Payload), "upstream aggregator reasoning is preserved") {
+		t.Fatalf("non-DeepSeek response reasoning was not passed through: %s", resp.Payload)
+	}
+	logValue, ok := ginCtx.Get("API_REQUEST")
+	if !ok {
+		t.Fatal("expected request log body")
+	}
+	if strings.Contains(string(logValue.([]byte)), "cached reasoning must not leak") {
+		t.Fatalf("non-DeepSeek request log leaked cached reasoning: %s", logValue.([]byte))
+	}
+	if got := defaultDeepSeekReasoningCache.Len(); got != 1 {
+		t.Fatalf("non-DeepSeek response capture changed cache Len=%d, want prepopulated entry only", got)
+	}
+}
+
+func TestOpenAICompatNonDeepSeekStreamPassThroughWithPrepopulatedCache(t *testing.T) {
+	oldCache := defaultDeepSeekReasoningCache
+	defaultDeepSeekReasoningCache = newDeepSeekReasoningCache(time.Minute, 16)
+	t.Cleanup(func() { defaultDeepSeekReasoningCache = oldCache })
+
+	deepSeekIdentity := deepSeekCompatIdentity{Enabled: true, Provider: "deepseek", AuthScope: "id:auth-a", Model: "deepseek-chat"}
+	if !defaultDeepSeekReasoningCache.Put(deepSeekIdentity, deepSeekReasoningTurn{Reasoning: "cached stream reasoning must not leak", ToolCallIDs: []string{"call-stream-nondeepseek"}}) {
+		t.Fatal("expected prepopulated DeepSeek cache entry")
+	}
+
+	var gotBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = append([]byte(nil), body...)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(`data: {"id":"chatcmpl_stream_1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"reasoning_content":"nondeepseek stream reasoning","tool_calls":[{"index":0,"id":"call-upstream","function":{"name":"edit","arguments":"{}"}}]},"finish_reason":null}]}` + "\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n"))
+	}))
+	defer server.Close()
+
+	executor := NewOpenAICompatExecutor("openai-compatibility", &config.Config{
+		OpenAICompatibility: []config.OpenAICompatibility{{Name: "openrouter", BaseURL: server.URL + "/v1"}},
+	})
+	auth := &cliproxyauth.Auth{ID: "auth-a", Provider: "openai-compatibility", Attributes: map[string]string{
+		"compat_name": "openrouter",
+		"base_url":    server.URL + "/v1",
+		"api_key":     "synthetic-key",
+	}}
+	payload := []byte(`{"model":"deepseek-chat","messages":[{"role":"assistant","content":null,"tool_calls":[{"id":"call-stream-nondeepseek","type":"function","function":{"name":"edit","arguments":"{}"}}]},{"role":"user","content":"continue"}],"stream":true}`)
+	result, err := executor.ExecuteStream(context.Background(), auth, cliproxyexecutor.Request{Model: "deepseek-chat", Payload: payload}, cliproxyexecutor.Options{SourceFormat: sdktranslator.FromString("openai"), Stream: true})
+	if err != nil {
+		t.Fatalf("ExecuteStream error: %v", err)
+	}
+	var emitted strings.Builder
+	for chunk := range result.Chunks {
+		if chunk.Err != nil {
+			t.Fatalf("stream chunk error: %v", chunk.Err)
+		}
+		emitted.Write(chunk.Payload)
+	}
+	if gjson.GetBytes(gotBody, "messages.0.reasoning_content").Exists() {
+		t.Fatalf("non-DeepSeek stream request was patched: %s", gotBody)
+	}
+	if !strings.Contains(emitted.String(), "nondeepseek stream reasoning") {
+		t.Fatalf("non-DeepSeek stream output was not passed through: %s", emitted.String())
+	}
+	if got := defaultDeepSeekReasoningCache.Len(); got != 1 {
+		t.Fatalf("non-DeepSeek stream capture changed cache Len=%d, want prepopulated entry only", got)
+	}
+}
+
+func TestOpenAICompatCountTokensDoesNotUseDeepSeekCacheOrPatchPayload(t *testing.T) {
+	oldCache := defaultDeepSeekReasoningCache
+	defaultDeepSeekReasoningCache = newDeepSeekReasoningCache(time.Minute, 16)
+	t.Cleanup(func() { defaultDeepSeekReasoningCache = oldCache })
+
+	identity := deepSeekCompatIdentity{Enabled: true, Provider: "deepseek", AuthScope: "id:auth-a", Model: "deepseek-chat"}
+	if !defaultDeepSeekReasoningCache.Put(identity, deepSeekReasoningTurn{Reasoning: "count token cached reasoning must not be used", ToolCallIDs: []string{"call-count"}}) {
+		t.Fatal("expected prepopulated DeepSeek cache entry")
+	}
+
+	executor := NewOpenAICompatExecutor("openai-compatibility", &config.Config{})
+	auth := &cliproxyauth.Auth{ID: "auth-a", Provider: "openai-compatibility", Attributes: map[string]string{
+		"compat_name": "openrouter",
+		"base_url":    "https://openrouter.ai/api/v1",
+		"api_key":     "synthetic-key",
+	}}
+	payload := []byte(`{"model":"deepseek-chat","messages":[{"role":"assistant","content":null,"tool_calls":[{"id":"call-count","type":"function","function":{"name":"edit","arguments":"{}"}}]},{"role":"user","content":"count this"}]}`)
+	resp, err := executor.CountTokens(context.Background(), auth, cliproxyexecutor.Request{Model: "deepseek-chat", Payload: payload}, cliproxyexecutor.Options{SourceFormat: sdktranslator.FromString("openai")})
+	if err != nil {
+		t.Fatalf("CountTokens error: %v", err)
+	}
+	if !gjson.GetBytes(resp.Payload, "usage.prompt_tokens").Exists() {
+		t.Fatalf("CountTokens payload missing usage: %s", resp.Payload)
+	}
+	if strings.Contains(string(resp.Payload), "count token cached reasoning must not be used") || strings.Contains(string(resp.Payload), "reasoning_content") {
+		t.Fatalf("CountTokens response exposed cached reasoning or patched payload: %s", resp.Payload)
+	}
+	if got := defaultDeepSeekReasoningCache.Len(); got != 1 {
+		t.Fatalf("CountTokens changed cache Len=%d, want prepopulated entry only", got)
+	}
+}
+
+func TestOpenAICompatDeepSeekPatchedReasoningAbsentFromDefaultLogs(t *testing.T) {
+	oldCache := defaultDeepSeekReasoningCache
+	defaultDeepSeekReasoningCache = newDeepSeekReasoningCache(time.Minute, 16)
+	t.Cleanup(func() { defaultDeepSeekReasoningCache = oldCache })
+
+	secretReasoning := "synthetic-secret-reasoning-sentinel"
+	secretAPIKey := "sk-synthetic-secret-sentinel"
+	identity := deepSeekCompatIdentity{Enabled: true, Provider: "deepseek", AuthScope: "id:auth-secret", Model: "deepseek-chat"}
+	if !defaultDeepSeekReasoningCache.Put(identity, deepSeekReasoningTurn{Reasoning: secretReasoning, ToolCallIDs: []string{"call-secret"}}) {
+		t.Fatal("expected prepopulated DeepSeek cache entry")
+	}
+
+	var logBuffer bytes.Buffer
+	oldOut := log.StandardLogger().Out
+	oldLevel := log.GetLevel()
+	log.SetOutput(&logBuffer)
+	log.SetLevel(log.DebugLevel)
+	t.Cleanup(func() {
+		log.SetOutput(oldOut)
+		log.SetLevel(oldLevel)
+	})
+
+	var sentBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		sentBody = append([]byte(nil), body...)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl_1","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`))
+	}))
+	defer server.Close()
+
+	gin.SetMode(gin.TestMode)
+	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctxWithGin := context.WithValue(context.Background(), "gin", ginCtx)
+	executor := NewOpenAICompatExecutor("deepseek", &config.Config{SDKConfig: config.SDKConfig{RequestLog: false}})
+	auth := &cliproxyauth.Auth{ID: "auth-secret", Provider: "deepseek", Attributes: map[string]string{
+		"base_url": server.URL + "/v1",
+		"api_key":  secretAPIKey,
+	}}
+	payload := []byte(`{"model":"deepseek-chat","messages":[{"role":"assistant","content":null,"tool_calls":[{"id":"call-secret","type":"function","function":{"name":"edit","arguments":"{}"}}]},{"role":"user","content":"continue"}]}`)
+	if _, err := executor.Execute(ctxWithGin, auth, cliproxyexecutor.Request{Model: "deepseek-chat", Payload: payload}, cliproxyexecutor.Options{SourceFormat: sdktranslator.FromString("openai")}); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	if got := gjson.GetBytes(sentBody, "messages.0.reasoning_content").String(); got != secretReasoning {
+		t.Fatalf("expected sent upstream body to be patched, got %q body=%s", got, sentBody)
+	}
+	if _, ok := ginCtx.Get("API_REQUEST"); ok {
+		t.Fatal("default request logging disabled but API_REQUEST was stored")
+	}
+	logText := logBuffer.String()
+	for _, forbidden := range []string{secretReasoning, secretAPIKey, "Authorization"} {
+		if strings.Contains(logText, forbidden) {
+			t.Fatalf("default logs exposed forbidden sentinel %q: %s", forbidden, logText)
+		}
 	}
 }
