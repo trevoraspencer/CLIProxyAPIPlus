@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"sort"
 	"strings"
 	"time"
@@ -34,6 +36,92 @@ const (
 	codexOriginator            = "codex_cli_rs"
 	codexDefaultImageToolModel = "gpt-image-2"
 )
+
+// AvailableCodexAuthsMetadataKey carries available Auths via Options.Metadata.
+const AvailableCodexAuthsMetadataKey = "codex_available_auths"
+
+type codexTimingTrace struct {
+	dnsStart, dnsDone, connectStart, connectDone time.Time
+	tlsHandshakeStart, tlsHandshakeDone          time.Time
+	gotConn, firstByte, requestStart             time.Time
+}
+
+func newCodexTimingTrace() *codexTimingTrace {
+	return &codexTimingTrace{requestStart: time.Now()}
+}
+
+func (t *codexTimingTrace) durations() log.Fields {
+	m := make(log.Fields)
+	if t == nil {
+		return m
+	}
+	if !t.dnsDone.IsZero() && !t.dnsStart.IsZero() {
+		m["dns_ms"] = fmt.Sprintf("%d", t.dnsDone.Sub(t.dnsStart).Milliseconds())
+	}
+	if !t.connectDone.IsZero() && !t.connectStart.IsZero() {
+		m["tcp_connect_ms"] = fmt.Sprintf("%d", t.connectDone.Sub(t.connectStart).Milliseconds())
+	}
+	if !t.tlsHandshakeDone.IsZero() && !t.tlsHandshakeStart.IsZero() {
+		m["tls_handshake_ms"] = fmt.Sprintf("%d", t.tlsHandshakeDone.Sub(t.tlsHandshakeStart).Milliseconds())
+	}
+	if !t.firstByte.IsZero() && !t.requestStart.IsZero() {
+		m["ttfb_ms"] = fmt.Sprintf("%d", t.firstByte.Sub(t.requestStart).Milliseconds())
+	}
+	if !t.gotConn.IsZero() && !t.requestStart.IsZero() {
+		m["conn_established_ms"] = fmt.Sprintf("%d", t.gotConn.Sub(t.requestStart).Milliseconds())
+	}
+	return m
+}
+
+func (t *codexTimingTrace) clientTrace() *httptrace.ClientTrace {
+	if t == nil {
+		return nil
+	}
+	return &httptrace.ClientTrace{
+		DNSStart:             func(_ httptrace.DNSStartInfo) { t.dnsStart = time.Now() },
+		DNSDone:              func(_ httptrace.DNSDoneInfo) { t.dnsDone = time.Now() },
+		ConnectStart:         func(_, _ string) { t.connectStart = time.Now() },
+		ConnectDone:          func(_, _ string, _ error) { t.connectDone = time.Now() },
+		TLSHandshakeStart:    func() { t.tlsHandshakeStart = time.Now() },
+		TLSHandshakeDone:     func(_ tls.ConnectionState, _ error) { t.tlsHandshakeDone = time.Now() },
+		GotConn:              func(_ httptrace.GotConnInfo) { t.gotConn = time.Now() },
+		GotFirstResponseByte: func() { t.firstByte = time.Now() },
+	}
+}
+
+func logCodexTiming(ctx context.Context, trace *codexTimingTrace, authLabel string, isTimeout bool) {
+	if trace == nil {
+		return
+	}
+	entry := helps.LogWithRequestID(ctx).WithFields(trace.durations())
+	msg := "codex request timing"
+	if isTimeout {
+		msg = "codex request TIMED OUT"
+	}
+	if authLabel != "" {
+		entry = entry.WithField("auth", authLabel)
+	}
+	entry.Info(msg)
+}
+
+func withCodexTimingTrace(ctx context.Context, req *http.Request) (*codexTimingTrace, *http.Request) {
+	trace := newCodexTimingTrace()
+	return trace, req.WithContext(httptrace.WithClientTrace(ctx, trace.clientTrace()))
+}
+
+func (e *CodexExecutor) codexTimeoutCooldownDuration() time.Duration {
+	if e.cfg != nil && e.cfg.CodexTimeoutCooldownSeconds > 0 {
+		return time.Duration(e.cfg.CodexTimeoutCooldownSeconds) * time.Second
+	}
+	return 60 * time.Second
+}
+
+func (e *CodexExecutor) codexTimeoutRetries() int {
+	if e.cfg != nil {
+		return e.cfg.CodexTimeoutRetries
+	}
+	return 2
+}
 
 var dataTag = []byte("data:")
 
@@ -236,9 +324,18 @@ func (e *CodexExecutor) HttpRequest(ctx context.Context, auth *cliproxyauth.Auth
 	if err := e.PrepareRequest(httpReq, auth); err != nil {
 		return nil, err
 	}
+	trace, httpReq := withCodexTimingTrace(ctx, httpReq)
 	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
 	ensureCodexResponseHeaderTimeout(httpClient, e.codexResponseHeaderTimeout())
-	return httpClient.Do(httpReq)
+	resp, err := httpClient.Do(httpReq)
+	if err != nil {
+		authLabel := ""
+		if auth != nil {
+			authLabel = auth.Label
+		}
+		logCodexTiming(ctx, trace, authLabel, isCodexTimeoutError(err))
+	}
+	return resp, err
 }
 
 func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (resp cliproxyexecutor.Response, err error) {
@@ -310,6 +407,7 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 		AuthType:  authType,
 		AuthValue: authValue,
 	})
+	trace, httpReq := withCodexTimingTrace(ctx, httpReq)
 	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
 	ensureCodexResponseHeaderTimeout(httpClient, e.codexResponseHeaderTimeout())
 	httpResp, err := httpClient.Do(httpReq)
@@ -317,6 +415,8 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 		helps.RecordAPIResponseError(ctx, e.cfg, err)
 		if isCodexTimeoutError(err) {
 			helps.LogWithRequestID(ctx).Warnf("codex response header timeout: %v (auth: %s)", err, authLabel)
+			logCodexTiming(ctx, trace, authLabel, true)
+			cliproxyauth.ApplyTimeoutCooldown(auth, baseModel, e.codexTimeoutCooldownDuration(), time.Now())
 		}
 		return resp, err
 	}
@@ -325,6 +425,7 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 			log.Errorf("codex executor: close response body error: %v", errClose)
 		}
 	}()
+	logCodexTiming(ctx, trace, authLabel, false)
 	helps.RecordAPIResponseMetadata(ctx, e.cfg, httpResp.StatusCode, httpResp.Header.Clone())
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
 		b, _ := io.ReadAll(httpResp.Body)
@@ -473,11 +574,16 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 		AuthType:  authType,
 		AuthValue: authValue,
 	})
+	trace, httpReq := withCodexTimingTrace(ctx, httpReq)
 	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
 	ensureCodexResponseHeaderTimeout(httpClient, e.codexResponseHeaderTimeout())
 	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
 		helps.RecordAPIResponseError(ctx, e.cfg, err)
+		if isCodexTimeoutError(err) {
+			logCodexTiming(ctx, trace, authLabel, true)
+			cliproxyauth.ApplyTimeoutCooldown(auth, baseModel, e.codexTimeoutCooldownDuration(), time.Now())
+		}
 		return resp, err
 	}
 	defer func() {
@@ -485,6 +591,7 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 			log.Errorf("codex executor: close response body error: %v", errClose)
 		}
 	}()
+	logCodexTiming(ctx, trace, authLabel, false)
 	helps.RecordAPIResponseMetadata(ctx, e.cfg, httpResp.StatusCode, httpResp.Header.Clone())
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
 		b, _ := io.ReadAll(httpResp.Body)
@@ -576,6 +683,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 		AuthValue: authValue,
 	})
 
+	trace, httpReq := withCodexTimingTrace(ctx, httpReq)
 	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
 	ensureCodexResponseHeaderTimeout(httpClient, e.codexResponseHeaderTimeout())
 	httpResp, err := httpClient.Do(httpReq)
@@ -583,9 +691,12 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 		helps.RecordAPIResponseError(ctx, e.cfg, err)
 		if isCodexTimeoutError(err) {
 			helps.LogWithRequestID(ctx).Warnf("codex response header timeout: %v (auth: %s)", err, authLabel)
+			logCodexTiming(ctx, trace, authLabel, true)
+			cliproxyauth.ApplyTimeoutCooldown(auth, baseModel, e.codexTimeoutCooldownDuration(), time.Now())
 		}
 		return nil, err
 	}
+	logCodexTiming(ctx, trace, authLabel, false)
 	helps.RecordAPIResponseMetadata(ctx, e.cfg, httpResp.StatusCode, httpResp.Header.Clone())
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
 		data, readErr := io.ReadAll(httpResp.Body)

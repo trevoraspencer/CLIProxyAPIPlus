@@ -651,11 +651,25 @@ func (e *CodexWebsocketsExecutor) dialCodexWebsocket(ctx context.Context, auth *
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	dialStart := time.Now()
 	conn, resp, err := dialer.DialContext(ctx, wsURL, headers)
+	dialElapsed := time.Since(dialStart)
 	if conn != nil {
 		// Avoid gorilla/websocket flate tail validation issues on some upstreams/Go versions.
 		// Negotiating permessage-deflate is fine; we just don't compress outbound messages.
 		conn.EnableWriteCompression(false)
+	}
+	if err != nil {
+		authLabel := ""
+		if auth != nil {
+			authLabel = auth.Label
+		}
+		isTimeout := strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline")
+		helps.LogWithRequestID(ctx).WithFields(log.Fields{
+			"ws_dial_ms": dialElapsed.Milliseconds(),
+			"ws_timeout": isTimeout,
+			"auth":       authLabel,
+		}).Warnf("codex websocket dial error: %v", err)
 	}
 	return conn, resp, err
 }
