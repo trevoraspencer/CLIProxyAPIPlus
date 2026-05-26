@@ -1,0 +1,122 @@
+{
+  "groupId": "executor-thinking",
+  "testedAt": "2026-05-17T21:37:38Z",
+  "isolation": {
+    "missionDir": "/Users/trevor/.factory/missions/1b7d85bc-f3a7-4537-8c69-c019de14064d",
+    "repoRoot": "/Users/trevor/code/CLIProxyAPIPlus",
+    "milestone": "zai-coding-plan",
+    "surface": "Go tests/static checks",
+    "constraints": [
+      "No persistent services started",
+      "Did not use 127.0.0.1:8318",
+      "No live api.z.ai or opencode.ai calls",
+      "No .env, config.yaml, or auth material created",
+      "Only report/evidence files were written"
+    ]
+  },
+  "toolsUsed": [
+    "Read",
+    "Grep",
+    "LS",
+    "Execute",
+    "TodoWrite"
+  ],
+  "commandsRun": [
+    {
+      "command": "go test -v ./internal/runtime/executor -run 'TestZAIExecutor(ExecutePostsChatCompletions|ExecuteStreamHandlesSSEAndUsage|ExecuteStreamPropagatesUpstreamErrors|RejectsEmptyAPIKeyBeforeDispatch|CountTokensIsLocalOnly)$' > /Users/trevor/.factory/missions/1b7d85bc-f3a7-4537-8c69-c019de14064d/evidence/zai-coding-plan/executor-thinking/zai-executor-tests.txt 2>&1",
+      "exitCode": 0,
+      "observation": "All targeted Z.AI executor tests passed, covering non-stream POST/header/body/custom headers/response, streaming SSE usage/[DONE]/errors/body closure paths, empty-key no-dispatch, and local-only CountTokens."
+    },
+    {
+      "command": "go test -v ./internal/thinking/provider/zai -run 'TestZAIThinkingApplier(EnablesThinking|DisablesThinking)$' > /Users/trevor/.factory/missions/1b7d85bc-f3a7-4537-8c69-c019de14064d/evidence/zai-coding-plan/executor-thinking/zai-thinking-tests.txt 2>&1",
+      "exitCode": 0,
+      "observation": "All targeted Z.AI thinking provider tests passed, verifying enabled/disabled mappings, reasoning_effort removal, and clear_thinking preservation."
+    },
+    {
+      "command": "rg -n \"api\\.z\\.ai|opencode\\.ai|\\.env|config\\.yaml|auths/|httptest|NewServer|CountTokens|header:X-ZAI|Authorization|stream_options|\\[DONE\\]|clear_thinking|tool_choice|tools|Body\\.Close|defer .*Close|Close\\(\\)\" /Users/trevor/code/CLIProxyAPIPlus/internal/runtime/executor/zai_executor_test.go /Users/trevor/code/CLIProxyAPIPlus/internal/runtime/executor/zai_executor.go /Users/trevor/code/CLIProxyAPIPlus/internal/thinking/provider/zai/apply_test.go /Users/trevor/code/CLIProxyAPIPlus/internal/thinking/provider/zai/apply.go > /Users/trevor/.factory/missions/1b7d85bc-f3a7-4537-8c69-c019de14064d/evidence/zai-coding-plan/executor-thinking/zai-static-inspection.txt 2>&1",
+      "exitCode": 0,
+      "observation": "Static inspection found httptest-only executor tests, outbound Authorization/custom header assertions, tool fields, stream_options.include_usage, [DONE], response Body.Close handling, CountTokens, and Z.AI thinking clear_thinking checks."
+    },
+    {
+      "command": "rg -n \"https?://api\\.z\\.ai|api\\.z\\.ai|https?://opencode\\.ai|curl .*z\\.ai|curl .*opencode|http\\.Get|http\\.Post|NewRequest.*api\\.z\\.ai|NewRequest.*opencode\" /Users/trevor/code/CLIProxyAPIPlus --glob '*_test.go' --glob '*.sh' --glob '*.ps1' --glob '*.go' --glob '!docs/**' --glob '!README*' --glob '!config.example.yaml' > /Users/trevor/.factory/missions/1b7d85bc-f3a7-4537-8c69-c019de14064d/evidence/zai-coding-plan/executor-thinking/live-call-scan.txt 2>&1; test $? -le 1",
+      "exitCode": 0,
+      "observation": "Static scan found no executable live provider calls; matches were httptest srv.URL http.Get calls and the Z.AI default base URL constant."
+    },
+    {
+      "command": "rg -n \"zai-key|zai-stream-key|custom-value|stream-custom|Authorization: Bearer|Bearer zai|api[_-]?key\\s*[:=]\\s*['\\\"][A-Za-z0-9_-]{20,}\" /Users/trevor/code/CLIProxyAPIPlus --glob '!go.sum' --glob '!go.mod' > /Users/trevor/.factory/missions/1b7d85bc-f3a7-4537-8c69-c019de14064d/evidence/zai-coding-plan/executor-thinking/secret-placeholder-scan.txt 2>&1; test $? -le 1",
+      "exitCode": 0,
+      "observation": "Secret-oriented scan showed placeholder/fake test keys and generic scripts only; no real-looking Z.AI credentials were required or introduced."
+    }
+  ],
+  "assertions": [
+    {
+      "id": "VAL-ZAI-007",
+      "status": "pass",
+      "reason": "Targeted mocked executor test confirms non-streaming Z.AI execution POSTs to /chat/completions, sets bearer authorization and JSON content headers, forwards custom header:X-ZAI-Test, translates OpenAI chat request/response locally, and uses httptest only.",
+      "evidence": [
+        "zai-coding-plan/executor-thinking/zai-executor-tests.txt",
+        "zai-coding-plan/executor-thinking/zai-static-inspection.txt"
+      ]
+    },
+    {
+      "id": "VAL-ZAI-008",
+      "status": "pass",
+      "reason": "Mocked streaming tests passed for SSE POST path, Accept text/event-stream, stream_options.include_usage, translated chunks, [DONE], upstream 429 propagation, and implementation closes response bodies on success/error paths.",
+      "evidence": [
+        "zai-coding-plan/executor-thinking/zai-executor-tests.txt",
+        "zai-coding-plan/executor-thinking/zai-static-inspection.txt"
+      ]
+    },
+    {
+      "id": "VAL-ZAI-009",
+      "status": "pass",
+      "reason": "Thinking provider and executor tests passed: reasoning_effort high maps to thinking.type enabled, none maps to disabled, reasoning_effort is removed, and thinking.clear_thinking is preserved.",
+      "evidence": [
+        "zai-coding-plan/executor-thinking/zai-thinking-tests.txt",
+        "zai-coding-plan/executor-thinking/zai-executor-tests.txt",
+        "zai-coding-plan/executor-thinking/zai-static-inspection.txt"
+      ]
+    },
+    {
+      "id": "VAL-ZAI-010",
+      "status": "pass",
+      "reason": "Mocked non-streaming executor test includes tools and tool_choice in the outbound body and asserts the function tool name and tool_choice function name are preserved after translation/thinking normalization.",
+      "evidence": [
+        "zai-coding-plan/executor-thinking/zai-executor-tests.txt",
+        "zai-coding-plan/executor-thinking/zai-static-inspection.txt"
+      ]
+    },
+    {
+      "id": "VAL-ZAI-011",
+      "status": "pass",
+      "reason": "Validation used only local Go tests/static checks. Static scan found httptest usage and no executable live api.z.ai/opencode.ai call; no .env, config.yaml, or auth material was created.",
+      "evidence": [
+        "zai-coding-plan/executor-thinking/live-call-scan.txt",
+        "zai-coding-plan/executor-thinking/zai-executor-tests.txt",
+        "zai-coding-plan/executor-thinking/zai-thinking-tests.txt"
+      ]
+    },
+    {
+      "id": "VAL-ZAI-013",
+      "status": "pass",
+      "reason": "Mocked executor tests confirm custom header attributes header:X-ZAI-Test and header:X-ZAI-Stream are sent outbound. Static inspection shows custom headers come from header: attributes and request logging masks sensitive headers/auth values; secret scan found fake placeholders only.",
+      "evidence": [
+        "zai-coding-plan/executor-thinking/zai-executor-tests.txt",
+        "zai-coding-plan/executor-thinking/zai-static-inspection.txt",
+        "zai-coding-plan/executor-thinking/secret-placeholder-scan.txt"
+      ]
+    },
+    {
+      "id": "VAL-ZAI-014",
+      "status": "pass",
+      "reason": "CountTokens targeted test passed with an httptest server that fails on any request, confirming local-only token counting; implementation translates to OpenAI format, applies Z.AI thinking normalization, counts locally, and returns deterministic usage JSON.",
+      "evidence": [
+        "zai-coding-plan/executor-thinking/zai-executor-tests.txt",
+        "zai-coding-plan/executor-thinking/zai-static-inspection.txt"
+      ]
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 7 assigned Z.AI executor/thinking assertions: 7 passed, 0 failed, 0 blocked."
+}

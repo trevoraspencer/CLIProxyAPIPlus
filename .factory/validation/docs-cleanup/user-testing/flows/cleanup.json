@@ -1,0 +1,558 @@
+{
+  "groupId": "cleanup",
+  "testedAt": "2026-05-17T22:33:34.385998+00:00",
+  "isolation": {
+    "milestone": "docs-cleanup",
+    "repoRoot": "/Users/trevor/code/CLIProxyAPIPlus",
+    "missionDir": "/Users/trevor/.factory/missions/1b7d85bc-f3a7-4537-8c69-c019de14064d",
+    "mode": "read-only/static repository validation",
+    "constraints": [
+      "no persistent services",
+      "no fixed ports",
+      "no 127.0.0.1:8318",
+      "no live api.z.ai/opencode.ai calls",
+      "no .env/config.yaml/auth material creation"
+    ]
+  },
+  "toolsUsed": [
+    "Read",
+    "Glob",
+    "Grep",
+    "Execute",
+    "python3",
+    "rg",
+    "git"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-CLEAN-001",
+      "title": "Chinese and Japanese top-level READMEs are removed",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Checked top-level localized README file absence",
+          "expected": "README_CN.md and README_JA.md do not exist",
+          "observed": "Both files absent"
+        },
+        {
+          "action": "Searched repository excluding .factory/.git for localized README references",
+          "expected": "No README.md or repo references to deleted localized READMEs",
+          "observed": "No matches"
+        }
+      ],
+      "evidence": {
+        "commands": [
+          {
+            "command": "python3 file absence check for localized README/docs, FUNDING.yml, README-ccs-fork.md, and promotional asset filenames",
+            "exitCode": 0,
+            "evidence": "docs-cleanup/cleanup/localized-file-absence.txt",
+            "observation": "README_CN.md, README_JA.md, .github/FUNDING.yml, and README-ccs-fork.md absent; no docs/**/*_CN.md or docs/**/*_JA.md; no promotional asset filenames for PackyCode/AICodeMirror/BmoPlus/VisionCoder/Lingtrue."
+          },
+          {
+            "command": "rg -n -i --glob '!.git/**' --glob '!.factory/**' 'README_CN\\.md|README_JA\\.md|README-ccs-fork\\.md|_CN\\.md|_JA\\.md|FUNDING\\.yml|github sponsor|github sponsors' .",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/stale-localized-reference-rg.txt",
+            "observation": "No matches (ripgrep exit 1 means no matches)."
+          }
+        ],
+        "screenshots": [],
+        "consoleErrors": "not applicable - command-line static validation",
+        "network": "none - no live or local service calls performed"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CLEAN-002",
+      "title": "Localized docs under docs/ are removed",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Enumerated docs/**/*_CN.md and docs/**/*_JA.md",
+          "expected": "No localized Markdown files remain under docs/",
+          "observed": "No localized docs found"
+        },
+        {
+          "action": "Searched repository excluding .factory/.git for _CN.md/_JA.md references",
+          "expected": "No docs link to deleted localized files",
+          "observed": "No matches"
+        }
+      ],
+      "evidence": {
+        "commands": [
+          {
+            "command": "python3 file absence check for localized README/docs, FUNDING.yml, README-ccs-fork.md, and promotional asset filenames",
+            "exitCode": 0,
+            "evidence": "docs-cleanup/cleanup/localized-file-absence.txt",
+            "observation": "README_CN.md, README_JA.md, .github/FUNDING.yml, and README-ccs-fork.md absent; no docs/**/*_CN.md or docs/**/*_JA.md; no promotional asset filenames for PackyCode/AICodeMirror/BmoPlus/VisionCoder/Lingtrue."
+          },
+          {
+            "command": "rg -n -i --glob '!.git/**' --glob '!.factory/**' 'README_CN\\.md|README_JA\\.md|README-ccs-fork\\.md|_CN\\.md|_JA\\.md|FUNDING\\.yml|github sponsor|github sponsors' .",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/stale-localized-reference-rg.txt",
+            "observation": "No matches (ripgrep exit 1 means no matches)."
+          }
+        ],
+        "screenshots": [],
+        "consoleErrors": "not applicable - command-line static validation",
+        "network": "none - no live or local service calls performed"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CLEAN-003",
+      "title": "README sponsor/promotional sections are removed",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Searched README/docs/metadata for sponsor/referral/discount/promo/brand terms",
+          "expected": "No Sponsor section or promotional terms/brands remain",
+          "observed": "No matches"
+        },
+        {
+          "action": "Searched README headings for Sponsor",
+          "expected": "No Sponsor heading",
+          "observed": "No matches"
+        }
+      ],
+      "evidence": {
+        "commands": [
+          {
+            "command": "rg -n -i --glob '!.git/**' --glob '!.factory/**' 'sponsor|referral|discount|promo|invite-code|invitecode|aff=|PackyCode|AICodeMirror|BmoPlus|VisionCoder|Lingtrue|packycode|aicodemirror|bmoplus|visioncoder|lingtrue' README.md docs AGENTS.md assets .github .goreleaser.yml .dockerignore .gitattributes Dockerfile docker-compose.yml",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/promo-terms-rg.txt",
+            "observation": "No matches (ripgrep exit 1 means no matches)."
+          },
+          {
+            "command": "rg -n -i '^#+ .*?(Sponsor|Who is with us\\?|More choices)' README.md",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/readme-cleanup-headings-rg.txt",
+            "observation": "No removed promotional headings remain."
+          }
+        ],
+        "screenshots": [],
+        "consoleErrors": "not applicable - command-line static validation",
+        "network": "none - no live or local service calls performed"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CLEAN-004",
+      "title": "Promotional showcase sections are removed or de-promotionalized",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Searched README headings for Who is with us? and More choices",
+          "expected": "Neither promotional showcase heading remains",
+          "observed": "No matches"
+        },
+        {
+          "action": "Reviewed README section list from initial read",
+          "expected": "Only factual sections remain",
+          "observed": "README contains factual project/provider/auth/SDK sections and no showcase headings"
+        }
+      ],
+      "evidence": {
+        "commands": [
+          {
+            "command": "rg -n -i '^#+ .*?(Sponsor|Who is with us\\?|More choices)' README.md",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/readme-cleanup-headings-rg.txt",
+            "observation": "No removed promotional headings remain."
+          },
+          {
+            "command": "rg -n -i --glob '!.git/**' --glob '!.factory/**' 'sponsor|referral|discount|promo|invite-code|invitecode|aff=|PackyCode|AICodeMirror|BmoPlus|VisionCoder|Lingtrue|packycode|aicodemirror|bmoplus|visioncoder|lingtrue' README.md docs AGENTS.md assets .github .goreleaser.yml .dockerignore .gitattributes Dockerfile docker-compose.yml",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/promo-terms-rg.txt",
+            "observation": "No matches (ripgrep exit 1 means no matches)."
+          }
+        ],
+        "screenshots": [],
+        "consoleErrors": "not applicable - command-line static validation",
+        "network": "none - no live or local service calls performed"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CLEAN-005",
+      "title": "Sponsor/promotional assets are removed",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Scanned assets for promotional brand filenames",
+          "expected": "No PackyCode, AICodeMirror, BmoPlus, VisionCoder, or Lingtrue assets remain",
+          "observed": "No matching asset files found"
+        },
+        {
+          "action": "Searched repo/metadata/docs for brand or deleted asset references",
+          "expected": "No stale promotional asset references",
+          "observed": "No matches"
+        }
+      ],
+      "evidence": {
+        "commands": [
+          {
+            "command": "python3 file absence check for localized README/docs, FUNDING.yml, README-ccs-fork.md, and promotional asset filenames",
+            "exitCode": 0,
+            "evidence": "docs-cleanup/cleanup/localized-file-absence.txt",
+            "observation": "README_CN.md, README_JA.md, .github/FUNDING.yml, and README-ccs-fork.md absent; no docs/**/*_CN.md or docs/**/*_JA.md; no promotional asset filenames for PackyCode/AICodeMirror/BmoPlus/VisionCoder/Lingtrue."
+          },
+          {
+            "command": "rg -n -i --glob '!.git/**' --glob '!.factory/**' 'sponsor|referral|discount|promo|invite-code|invitecode|aff=|PackyCode|AICodeMirror|BmoPlus|VisionCoder|Lingtrue|packycode|aicodemirror|bmoplus|visioncoder|lingtrue' README.md docs AGENTS.md assets .github .goreleaser.yml .dockerignore .gitattributes Dockerfile docker-compose.yml",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/promo-terms-rg.txt",
+            "observation": "No matches (ripgrep exit 1 means no matches)."
+          },
+          {
+            "command": "rg -n -i 'README_CN\\.md|README_JA\\.md|README-ccs-fork\\.md|_CN\\.md|_JA\\.md|FUNDING\\.yml|packycode|aicodemirror|bmoplus|visioncoder|lingtrue' .goreleaser.yml .dockerignore .gitattributes Dockerfile docker-compose.yml .github/workflows README.md docs AGENTS.md",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/metadata-stale-reference-rg.txt",
+            "observation": "No stale references in metadata/workflow/docs scope."
+          }
+        ],
+        "screenshots": [],
+        "consoleErrors": "not applicable - command-line static validation",
+        "network": "none - no live or local service calls performed"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CLEAN-006",
+      "title": "Funding metadata is removed",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Checked .github/FUNDING.yml absence",
+          "expected": ".github/FUNDING.yml does not exist",
+          "observed": "File absent"
+        },
+        {
+          "action": "Searched docs/metadata for funding and GitHub Sponsors references",
+          "expected": "No funding metadata references remain",
+          "observed": "No matches"
+        }
+      ],
+      "evidence": {
+        "commands": [
+          {
+            "command": "python3 file absence check for localized README/docs, FUNDING.yml, README-ccs-fork.md, and promotional asset filenames",
+            "exitCode": 0,
+            "evidence": "docs-cleanup/cleanup/localized-file-absence.txt",
+            "observation": "README_CN.md, README_JA.md, .github/FUNDING.yml, and README-ccs-fork.md absent; no docs/**/*_CN.md or docs/**/*_JA.md; no promotional asset filenames for PackyCode/AICodeMirror/BmoPlus/VisionCoder/Lingtrue."
+          },
+          {
+            "command": "rg -n -i --glob '!.git/**' --glob '!.factory/**' 'README_CN\\.md|README_JA\\.md|README-ccs-fork\\.md|_CN\\.md|_JA\\.md|FUNDING\\.yml|github sponsor|github sponsors' .",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/stale-localized-reference-rg.txt",
+            "observation": "No matches (ripgrep exit 1 means no matches)."
+          },
+          {
+            "command": "rg -n -i --glob '!.git/**' --glob '!.factory/**' 'sponsor|referral|discount|promo|invite-code|invitecode|aff=|PackyCode|AICodeMirror|BmoPlus|VisionCoder|Lingtrue|packycode|aicodemirror|bmoplus|visioncoder|lingtrue' README.md docs AGENTS.md assets .github .goreleaser.yml .dockerignore .gitattributes Dockerfile docker-compose.yml",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/promo-terms-rg.txt",
+            "observation": "No matches (ripgrep exit 1 means no matches)."
+          }
+        ],
+        "screenshots": [],
+        "consoleErrors": "not applicable - command-line static validation",
+        "network": "none - no live or local service calls performed"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CLEAN-007",
+      "title": "Fork note is removed",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Checked README-ccs-fork.md absence",
+          "expected": "README-ccs-fork.md does not exist",
+          "observed": "File absent"
+        },
+        {
+          "action": "Searched repo excluding .factory/.git for README-ccs-fork references",
+          "expected": "No references remain",
+          "observed": "No matches"
+        }
+      ],
+      "evidence": {
+        "commands": [
+          {
+            "command": "python3 file absence check for localized README/docs, FUNDING.yml, README-ccs-fork.md, and promotional asset filenames",
+            "exitCode": 0,
+            "evidence": "docs-cleanup/cleanup/localized-file-absence.txt",
+            "observation": "README_CN.md, README_JA.md, .github/FUNDING.yml, and README-ccs-fork.md absent; no docs/**/*_CN.md or docs/**/*_JA.md; no promotional asset filenames for PackyCode/AICodeMirror/BmoPlus/VisionCoder/Lingtrue."
+          },
+          {
+            "command": "rg -n -i --glob '!.git/**' --glob '!.factory/**' 'README_CN\\.md|README_JA\\.md|README-ccs-fork\\.md|_CN\\.md|_JA\\.md|FUNDING\\.yml|github sponsor|github sponsors' .",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/stale-localized-reference-rg.txt",
+            "observation": "No matches (ripgrep exit 1 means no matches)."
+          },
+          {
+            "command": "rg -n -i 'README_CN\\.md|README_JA\\.md|README-ccs-fork\\.md|_CN\\.md|_JA\\.md|FUNDING\\.yml|packycode|aicodemirror|bmoplus|visioncoder|lingtrue' .goreleaser.yml .dockerignore .gitattributes Dockerfile docker-compose.yml .github/workflows README.md docs AGENTS.md",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/metadata-stale-reference-rg.txt",
+            "observation": "No stale references in metadata/workflow/docs scope."
+          }
+        ],
+        "screenshots": [],
+        "consoleErrors": "not applicable - command-line static validation",
+        "network": "none - no live or local service calls performed"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CLEAN-008",
+      "title": "Release packaging references are repaired",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Searched release/archive/Docker/workflow metadata for deleted docs/assets/funding/fork references",
+          "expected": "No stale metadata references remain",
+          "observed": "No matches in .goreleaser.yml, .dockerignore, .gitattributes, Dockerfile, docker-compose.yml, .github/workflows, README.md, docs, or AGENTS.md"
+        },
+        {
+          "action": "Parsed config.example.yaml as a local consistency check",
+          "expected": "YAML remains valid",
+          "observed": "Parsed successfully"
+        }
+      ],
+      "evidence": {
+        "commands": [
+          {
+            "command": "rg -n -i 'README_CN\\.md|README_JA\\.md|README-ccs-fork\\.md|_CN\\.md|_JA\\.md|FUNDING\\.yml|packycode|aicodemirror|bmoplus|visioncoder|lingtrue' .goreleaser.yml .dockerignore .gitattributes Dockerfile docker-compose.yml .github/workflows README.md docs AGENTS.md",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/metadata-stale-reference-rg.txt",
+            "observation": "No stale references in metadata/workflow/docs scope."
+          },
+          {
+            "command": "python3 -c \"import yaml, pathlib; yaml.safe_load(pathlib.Path('config.example.yaml').read_text()); print('config.example.yaml parsed successfully')\"",
+            "exitCode": 0,
+            "evidence": "docs-cleanup/cleanup/config-yaml-parse.txt",
+            "observation": "config.example.yaml parsed successfully."
+          },
+          {
+            "command": "git diff --check",
+            "exitCode": 0,
+            "evidence": "docs-cleanup/cleanup/git-diff-check.txt",
+            "observation": "No whitespace errors."
+          }
+        ],
+        "screenshots": [],
+        "consoleErrors": "not applicable - command-line static validation",
+        "network": "none - no live or local service calls performed"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CLEAN-009",
+      "title": "Repository guidance references are repaired",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Read AGENTS.md and searched for localized doc assumptions",
+          "expected": "No stale README_CN/README_JA/_CN.md/_JA.md guidance; docs guidance aligns with English-only default",
+          "observed": "No stale localized references; AGENTS.md states new Markdown docs should be English unless explicitly requested"
+        }
+      ],
+      "evidence": {
+        "commands": [
+          {
+            "command": "rg -n -i 'README_CN\\.md|README_JA\\.md|README-ccs-fork\\.md|_CN\\.md|_JA\\.md|FUNDING\\.yml|packycode|aicodemirror|bmoplus|visioncoder|lingtrue' .goreleaser.yml .dockerignore .gitattributes Dockerfile docker-compose.yml .github/workflows README.md docs AGENTS.md",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/metadata-stale-reference-rg.txt",
+            "observation": "No stale references in metadata/workflow/docs scope."
+          },
+          {
+            "command": "rg -n -i --glob '!.git/**' --glob '!.factory/**' 'README_CN\\.md|README_JA\\.md|README-ccs-fork\\.md|_CN\\.md|_JA\\.md|FUNDING\\.yml|github sponsor|github sponsors' .",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/stale-localized-reference-rg.txt",
+            "observation": "No matches (ripgrep exit 1 means no matches)."
+          }
+        ],
+        "screenshots": [],
+        "consoleErrors": "not applicable - command-line static validation",
+        "network": "none - no live or local service calls performed"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CLEAN-010",
+      "title": "Remaining Markdown local links are valid",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Ran local Markdown link checker over README.md, docs/**/*.md, and AGENTS.md",
+          "expected": "All relative local links resolve to existing files",
+          "observed": "No broken local links found"
+        },
+        {
+          "action": "Searched for deleted localized/fork/funding file references",
+          "expected": "No links to deleted files/assets",
+          "observed": "No matches"
+        }
+      ],
+      "evidence": {
+        "commands": [
+          {
+            "command": "python3 markdown local link check over README.md docs/**/*.md AGENTS.md",
+            "exitCode": 0,
+            "evidence": "docs-cleanup/cleanup/markdown-local-links.txt",
+            "observation": "No broken local Markdown links found."
+          },
+          {
+            "command": "rg -n -i --glob '!.git/**' --glob '!.factory/**' 'README_CN\\.md|README_JA\\.md|README-ccs-fork\\.md|_CN\\.md|_JA\\.md|FUNDING\\.yml|github sponsor|github sponsors' .",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/stale-localized-reference-rg.txt",
+            "observation": "No matches (ripgrep exit 1 means no matches)."
+          },
+          {
+            "command": "rg -n -i 'README_CN\\.md|README_JA\\.md|README-ccs-fork\\.md|_CN\\.md|_JA\\.md|FUNDING\\.yml|packycode|aicodemirror|bmoplus|visioncoder|lingtrue' .goreleaser.yml .dockerignore .gitattributes Dockerfile docker-compose.yml .github/workflows README.md docs AGENTS.md",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/metadata-stale-reference-rg.txt",
+            "observation": "No stale references in metadata/workflow/docs scope."
+          }
+        ],
+        "screenshots": [],
+        "consoleErrors": "not applicable - command-line static validation",
+        "network": "none - no live or local service calls performed"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CLEAN-011",
+      "title": "Cleanup does not add unrelated docs",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Checked git diff --name-status",
+          "expected": "No unrelated uncommitted docs additions in checkout",
+          "observed": "No uncommitted changes before validation artifacts"
+        },
+        {
+          "action": "Reviewed remaining docs set",
+          "expected": "Remaining docs are scoped existing English docs/auth README content",
+          "observed": "README.md and docs/*.md remain; no new unrelated doc files detected by diff"
+        }
+      ],
+      "evidence": {
+        "commands": [
+          {
+            "command": "git diff --name-status",
+            "exitCode": 0,
+            "evidence": "docs-cleanup/cleanup/git-diff-name-status.txt",
+            "observation": "No uncommitted documentation additions or unrelated changes were present."
+          },
+          {
+            "command": "git status --porcelain",
+            "exitCode": 0,
+            "evidence": "docs-cleanup/cleanup/git-status-porcelain.txt",
+            "observation": "Clean before validation artifacts were written."
+          }
+        ],
+        "screenshots": [],
+        "consoleErrors": "not applicable - command-line static validation",
+        "network": "none - no live or local service calls performed"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CLEAN-012",
+      "title": "Repository metadata has no stale deleted-file references",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Searched metadata/workflow/root-docs/docs guidance scope for deleted localized docs, sponsor assets, funding metadata, and fork-note references",
+          "expected": "No stale references remain",
+          "observed": "No matches"
+        }
+      ],
+      "evidence": {
+        "commands": [
+          {
+            "command": "rg -n -i 'README_CN\\.md|README_JA\\.md|README-ccs-fork\\.md|_CN\\.md|_JA\\.md|FUNDING\\.yml|packycode|aicodemirror|bmoplus|visioncoder|lingtrue' .goreleaser.yml .dockerignore .gitattributes Dockerfile docker-compose.yml .github/workflows README.md docs AGENTS.md",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/metadata-stale-reference-rg.txt",
+            "observation": "No stale references in metadata/workflow/docs scope."
+          },
+          {
+            "command": "rg -n -i --glob '!.git/**' --glob '!.factory/**' 'README_CN\\.md|README_JA\\.md|README-ccs-fork\\.md|_CN\\.md|_JA\\.md|FUNDING\\.yml|github sponsor|github sponsors' .",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/stale-localized-reference-rg.txt",
+            "observation": "No matches (ripgrep exit 1 means no matches)."
+          },
+          {
+            "command": "rg -n -i --glob '!.git/**' --glob '!.factory/**' 'sponsor|referral|discount|promo|invite-code|invitecode|aff=|PackyCode|AICodeMirror|BmoPlus|VisionCoder|Lingtrue|packycode|aicodemirror|bmoplus|visioncoder|lingtrue' README.md docs AGENTS.md assets .github .goreleaser.yml .dockerignore .gitattributes Dockerfile docker-compose.yml",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/promo-terms-rg.txt",
+            "observation": "No matches (ripgrep exit 1 means no matches)."
+          }
+        ],
+        "screenshots": [],
+        "consoleErrors": "not applicable - command-line static validation",
+        "network": "none - no live or local service calls performed"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-DOCS-009",
+      "title": "Auth docs are English-only and non-promotional",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Searched README/docs for sponsor, referral, discount, invite-code, affiliate, and named promotional brands",
+          "expected": "No promotional auth documentation language",
+          "observed": "No matches"
+        },
+        {
+          "action": "Scanned README/docs for CJK characters",
+          "expected": "No Chinese/Japanese localized auth documentation remains",
+          "observed": "No CJK characters found"
+        },
+        {
+          "action": "Manually reviewed refreshed auth sections during README read",
+          "expected": "English, concise, factual auth docs",
+          "observed": "x.ai, Z.AI, OpenCode, and local proxy credential sections are English and factual"
+        }
+      ],
+      "evidence": {
+        "commands": [
+          {
+            "command": "rg -n -i --glob '!.git/**' --glob '!.factory/**' 'sponsor|referral|discount|promo|invite-code|invitecode|aff=|PackyCode|AICodeMirror|BmoPlus|VisionCoder|Lingtrue|packycode|aicodemirror|bmoplus|visioncoder|lingtrue' README.md docs AGENTS.md assets .github .goreleaser.yml .dockerignore .gitattributes Dockerfile docker-compose.yml",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/promo-terms-rg.txt",
+            "observation": "No matches (ripgrep exit 1 means no matches)."
+          },
+          {
+            "command": "python3 CJK character scan over README.md docs/**/*.md",
+            "exitCode": 0,
+            "evidence": "docs-cleanup/cleanup/auth-docs-cjk-scan.txt",
+            "observation": "No Chinese/Japanese/Korean characters found in README/docs."
+          },
+          {
+            "command": "python3 non-ASCII scan over README.md docs/**/*.md",
+            "exitCode": 1,
+            "evidence": "docs-cleanup/cleanup/auth-docs-nonascii-scan.txt",
+            "observation": "Broad scan found only typographic punctuation/arrows/non-breaking hyphens, not localized prose; superseded by CJK scan."
+          }
+        ],
+        "screenshots": [],
+        "consoleErrors": "not applicable - command-line static validation",
+        "network": "none - no live or local service calls performed"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "A broad non-ASCII scan reported typographic arrows/hyphens/apostrophes in README/docs even though those are not localized prose.",
+      "resolved": true,
+      "resolution": "Ran a targeted CJK character scan for Chinese/Japanese/Korean characters and used promotional-term greps plus manual README review for the English-only/non-promotional auth-doc assertion.",
+      "affectedAssertions": [
+        "VAL-DOCS-009"
+      ]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 13 assigned assertions: all 13 passed. Validation used static repository checks only, with no services started, no fixed ports bound, and no live upstream calls."
+}

@@ -1,0 +1,63 @@
+{
+  "groupId": "auth-docs-rerun",
+  "milestone": "auth-docs-refresh",
+  "testedAt": "2026-05-17T22:16:37.968344Z",
+  "isolation": {
+    "missionDir": "/Users/trevor/.factory/missions/1b7d85bc-f3a7-4537-8c69-c019de14064d",
+    "repoRoot": "/Users/trevor/code/CLIProxyAPIPlus",
+    "surface": "command-line static checks over README.md and docs/",
+    "constraints": [
+      "No browser automation",
+      "No persistent proxy service",
+      "No fixed port binding",
+      "No live Z.AI/OpenCode API calls",
+      "No credentials, .env, config.yaml, or auth material accessed or created"
+    ]
+  },
+  "toolsUsed": [
+    "Read",
+    "Grep",
+    "Execute"
+  ],
+  "commandsRun": [
+    "Read /Users/trevor/code/CLIProxyAPIPlus/README.md",
+    "Read /Users/trevor/.factory/missions/1b7d85bc-f3a7-4537-8c69-c019de14064d/AGENTS.md",
+    "Read /Users/trevor/code/CLIProxyAPIPlus/.factory/library/user-testing.md",
+    "Read /Users/trevor/.factory/missions/1b7d85bc-f3a7-4537-8c69-c019de14064d/validation-contract.md",
+    "Grep README.md and docs/**/*.md for sponsor/referral/discount/invite-code/promotional terms",
+    "Grep README.md and docs/**/*.md for auth-related terms to identify refreshed auth docs",
+    "python3 static scan of README.md and docs/**/*.md for promotional terms and CJK/non-English lines"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-DOCS-009",
+      "title": "Auth docs are English-only and non-promotional",
+      "status": "fail",
+      "reason": "Found 12 sponsor/referral/discount/invite-code/promotional term matches in README/docs, including README.md Sponsor section lines 11-37. Found 188 CJK/non-English lines and 5 localized docs under docs/; this violates the English-only requirement.",
+      "evidence": {
+        "files": [
+          "auth-docs-refresh/auth-docs-rerun/VAL-DOCS-009-static-scan.txt",
+          "auth-docs-refresh/auth-docs-rerun/VAL-DOCS-009-readme-snippets.md",
+          "auth-docs-refresh/auth-docs-rerun/VAL-DOCS-009-localized-docs.txt"
+        ],
+        "promotionalTermMatchCount": 12,
+        "nonEnglishLineMatchCount": 188,
+        "localizedDocsFound": [
+          "docs/gitlab-duo_CN.md",
+          "docs/sdk-access_CN.md",
+          "docs/sdk-advanced_CN.md",
+          "docs/sdk-usage_CN.md",
+          "docs/sdk-watcher_CN.md"
+        ],
+        "notableFindings": [
+          "README.md contains a Sponsor section with PackyCode, AICodeMirror, BmoPlus, VisionCoder, discount, promo code, invitecode, aff=, and top-up language.",
+          "docs/ contains Chinese localized Markdown files such as docs/gitlab-duo_CN.md, docs/sdk-access_CN.md, docs/sdk-advanced_CN.md, docs/sdk-usage_CN.md, and docs/sdk-watcher_CN.md.",
+          "README.md refreshed auth sections for x.ai OAuth, Z.AI, and OpenCode are factual in the reviewed sample, but the broader README/docs surface fails the non-promotional and English-only checks."
+        ]
+      }
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 1 assertion: 0 passed, 1 failed. VAL-DOCS-009 failed because promotional sponsor language and non-English/localized docs remain in README.md/docs."
+}

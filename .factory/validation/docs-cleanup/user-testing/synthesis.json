@@ -1,0 +1,69 @@
+{
+  "milestone": "docs-cleanup",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 20,
+    "passed": 20,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-CLEAN-001",
+    "VAL-CLEAN-002",
+    "VAL-CLEAN-003",
+    "VAL-CLEAN-004",
+    "VAL-CLEAN-005",
+    "VAL-CLEAN-006",
+    "VAL-CLEAN-007",
+    "VAL-CLEAN-008",
+    "VAL-CLEAN-009",
+    "VAL-CLEAN-010",
+    "VAL-CLEAN-011",
+    "VAL-CLEAN-012",
+    "VAL-CROSS-001",
+    "VAL-CROSS-002",
+    "VAL-CROSS-003",
+    "VAL-CROSS-004",
+    "VAL-CROSS-005",
+    "VAL-CROSS-006",
+    "VAL-CROSS-007",
+    "VAL-DOCS-009"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null,
+  "flowReports": [
+    ".factory/validation/docs-cleanup/user-testing/flows/cleanup.json",
+    ".factory/validation/docs-cleanup/user-testing/flows/cross.json"
+  ],
+  "toolsUsed": [
+    "Execute",
+    "Glob",
+    "Grep",
+    "Read",
+    "git",
+    "go build",
+    "go test",
+    "python3",
+    "rg",
+    "ripgrep"
+  ],
+  "frictions": [
+    {
+      "description": "A broad non-ASCII scan reported typographic arrows/hyphens/apostrophes in README/docs even though those are not localized prose.",
+      "resolved": true,
+      "resolution": "Ran a targeted CJK character scan for Chinese/Japanese/Korean characters and used promotional-term greps plus manual README review for the English-only/non-promotional auth-doc assertion.",
+      "affectedAssertions": [
+        "VAL-DOCS-009"
+      ]
+    }
+  ],
+  "blockers": [],
+  "validationNotes": [
+    "Validation used command-line static checks and local Go/YAML/build gates only.",
+    "No persistent services were started, no fixed ports were bound, and no live Z.AI/OpenCode upstream calls were performed.",
+    "Flow validators confirmed all docs-cleanup assertions passed."
+  ]
+}

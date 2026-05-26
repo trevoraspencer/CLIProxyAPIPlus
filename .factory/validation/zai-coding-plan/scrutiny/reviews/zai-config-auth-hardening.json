@@ -1,0 +1,50 @@
+{
+  "featureId": "zai-config-auth-hardening",
+  "reviewedAt": "2026-05-17T21:18:56Z",
+  "commitId": "475d3d5499eb6c962200e2577420c12efe5b2815",
+  "transcriptSkeletonReviewed": false,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The config example and watcher synthesizer changes cover the commented placeholder example, config/default-base handling, and blank-key skipping for the watcher synthesizer path. However, file-backed auth loading through sdk/auth and the internal store backends still creates active Z.AI auth records with auth_kind=apikey and a default base_url when api_key/api-key is missing or blank, and the Z.AI executor does not reject an empty api key before dispatch. This leaves a usable/routable auth record that can reach execution without Authorization, so VAL-ZAI-004 is not satisfied.",
+    "issues": [
+      {
+        "file": "internal/store/zai_auth.go",
+        "line": 18,
+        "severity": "blocking",
+        "description": "applyZAIFileAPIKeyAttributes sets auth_kind=apikey and default base_url for provider zai but does not skip or disable the auth when api_key/api-key is absent or blank. git/object/postgres store readers call this helper and then append/return the active auth, so blank/missing Z.AI auth-file entries can remain routable despite VAL-ZAI-004 requiring store paths to skip or mark them unusable before execution."
+      },
+      {
+        "file": "sdk/auth/filestore.go",
+        "line": 284,
+        "severity": "blocking",
+        "description": "The SDK file token store has a duplicate applyZAIFileAPIKeyAttributes implementation with the same behavior: missing or blank api_key/api-key leaves an active zai auth with auth_kind=apikey and default base_url but no api_key attribute. This path was not hardened by commit 475d3d54 and fails the auth-file hardening requirement for sdk/auth."
+      },
+      {
+        "file": "internal/runtime/executor/zai_executor.go",
+        "line": 106,
+        "severity": "blocking",
+        "description": "Execution only adds Authorization when apiKey is non-empty and otherwise continues to POST to the upstream base URL; the streaming path has the same pattern at line 203. If an active auth from the file/git/object/postgres stores lacks api_key, it is not rejected before execution, contrary to the requirement that blank/missing Z.AI API keys cannot synthesize usable auth records or must be marked unusable before execution."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Z.AI file-auth normalization is duplicated in sdk/auth/filestore.go and internal/store/zai_auth.go, while watcher synthesis has a separate implementation. The mission guidance states file/git/object/postgres store paths are evidence for VAL-ZAI-004, but AGENTS.md does not call out that Z.AI auth-file hardening must be kept consistent across all three places.",
+      "evidence": "internal/watcher/synthesizer/file.go:162-191 was hardened to return nil on blank keys; internal/store/zai_auth.go:18-39 and sdk/auth/filestore.go:284-305 still set auth_kind/base_url without skipping or disabling missing-key auths."
+    },
+    {
+      "area": "skills",
+      "observation": "The reviewed worker session was recorded as a manual orchestrator repair because the worker repeatedly failed EndFeatureRun by omitting the required top-level commitId, despite the go-provider-worker skill explicitly warning that successful handoff must include commitId at top level.",
+      "evidence": "handoff skillFeedback.followedProcedure=false with deviation step EndFeatureRun; .factory/skills/go-provider-worker/SKILL.md step 6 says EndFeatureRun must include the feature commit hash in the top-level commitId field."
+    },
+    {
+      "area": "skills",
+      "observation": "The transcript skeleton for the assigned completed worker session e42ed717-549d-420d-970b-edd488e9a789 is absent from worker-transcripts.jsonl, so the review could not verify that exact session's transcript skeleton. The available transcript entries for this feature show earlier worker sessions and repeated reads of config.example.yaml.",
+      "evidence": "jq listing of worker-transcripts.jsonl contained fa6ce40d, 8617021c, e4d365ae, ed113f6c, and ee27c883 only; no e42ed717 entry was present. The available feature transcript shows many repeated Read calls over config.example.yaml."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: commits 530ecf9d and 475d3d54 cover the config example and watcher synthesizer path, but they do not harden SDK/internal store-backed Z.AI auth-file records or executor behavior against missing API keys, leaving VAL-ZAI-004 unmet."
+}

@@ -1,0 +1,131 @@
+{
+  "groupId": "auth-docs",
+  "milestone": "auth-docs-refresh",
+  "testedAt": "2026-05-17T22:11:24.864484Z",
+  "isolation": {
+    "missionDir": "/Users/trevor/.factory/missions/1b7d85bc-f3a7-4537-8c69-c019de14064d",
+    "repoRoot": "/Users/trevor/code/CLIProxyAPIPlus",
+    "surface": "Go tests/static checks",
+    "constraints": [
+      "local/static validation only",
+      "no persistent proxy service",
+      "no fixed port binding",
+      "no live Z.AI/OpenCode API calls",
+      "no credentials or auth material created"
+    ]
+  },
+  "assertions": [
+    {
+      "id": "VAL-DOCS-001",
+      "status": "pass",
+      "evidence": [
+        "auth-docs-refresh/auth-docs/static-grep-evidence.txt",
+        "README.md:148-162 documents x.ai OAuth login with --xai-oauth-login, --no-browser, and --oauth-callback-port; cmd/server/main.go:127-132 registers the helper flags and --xai-oauth-login."
+      ],
+      "reason": "English README describes x.ai as OAuth, not API-key auth, and uses the actual CLI flag plus relevant helper flags."
+    },
+    {
+      "id": "VAL-DOCS-002",
+      "status": "pass",
+      "evidence": [
+        "auth-docs-refresh/auth-docs/static-grep-evidence.txt",
+        "README.md:164-177 identifies xai-oauth, grok-4.3, oauth-model-alias, and oauth-excluded-models; config.example.yaml:481-512 includes xai-oauth/grok-4.3 examples."
+      ],
+      "reason": "Docs and config examples cover x.ai OAuth routing/channel naming and model alias/exclusion configuration."
+    },
+    {
+      "id": "VAL-DOCS-003",
+      "status": "pass",
+      "evidence": [
+        "auth-docs-refresh/auth-docs/static-grep-evidence.txt",
+        "README.md:181-199 documents zai-api-key, https://api.z.ai/api/coding/paas/v4, GLM examples glm-5.1/glm-5/glm-5-turbo, and warns never to commit real Z.AI keys; config.example.yaml:203-216 mirrors the setup."
+      ],
+      "reason": "Z.AI GLM Coding Plan API-key setup is documented with the Coding Plan URL, model examples, and credential safety guidance."
+    },
+    {
+      "id": "VAL-DOCS-004",
+      "status": "pass",
+      "evidence": [
+        "auth-docs-refresh/auth-docs/static-grep-evidence.txt",
+        "README.md:201-217 documents provider type zai, api_key/api-key and base_url/base-url support with placeholders; internal/store/zai_auth.go and sdk/auth/filestore.go grep hits show implemented metadata handling and default base URL behavior."
+      ],
+      "reason": "Z.AI auth-file usage is documented with implemented fields only, placeholder credentials, and no observed real Z.AI secrets in docs/config evidence."
+    },
+    {
+      "id": "VAL-DOCS-005",
+      "status": "pass",
+      "evidence": [
+        "auth-docs-refresh/auth-docs/static-grep-evidence.txt",
+        "README.md:220-233 and config.example.yaml:368-377 show opencode-zen as openai-compatibility with https://opencode.ai/zen/v1, api-key-entries, <OPENCODE_API_KEY>, prefix zen, and alias zen-default."
+      ],
+      "reason": "OpenCode Zen documentation is factual for the Zen setup and uses placeholder key text with Zen-specific routing."
+    },
+    {
+      "id": "VAL-DOCS-006",
+      "status": "pass",
+      "evidence": [
+        "auth-docs-refresh/auth-docs/static-grep-evidence.txt",
+        "README.md:220-245 and config.example.yaml:378-387 show opencode-go as openai-compatibility with https://opencode.ai/zen/go/v1, api-key-entries, <OPENCODE_API_KEY>, prefix go, and alias go-default distinct from Zen."
+      ],
+      "reason": "OpenCode Go documentation is factual for the Go setup and uses placeholder key text with Go-specific routing distinct from Zen."
+    },
+    {
+      "id": "VAL-DOCS-007",
+      "status": "pass",
+      "evidence": [
+        "auth-docs-refresh/auth-docs/static-grep-evidence.txt",
+        "README.md:222 explicitly states OpenCode Zen/Go use /chat/completions and do not cover /responses, WebSocket, or Anthropic /messages routes; scoped grep found no contradictory OpenCode /messages instructions."
+      ],
+      "reason": "Docs explicitly limit the documented OpenCode path to OpenAI-compatible chat completions and exclude Anthropic /messages support."
+    },
+    {
+      "id": "VAL-DOCS-008",
+      "status": "pass",
+      "evidence": [
+        "auth-docs-refresh/auth-docs/static-grep-evidence.txt",
+        "README.md:102-108 explains local proxy api-keys versus upstream provider credentials and local /v1 base URL; README.md:162, 199, and 245 show provider-specific client usage through the local proxy."
+      ],
+      "reason": "Docs clearly separate downstream local proxy API keys from upstream provider credentials and show local /v1 endpoint shapes."
+    },
+    {
+      "id": "VAL-DOCS-009",
+      "status": "fail",
+      "evidence": [
+        "auth-docs-refresh/auth-docs/static-grep-evidence.txt",
+        "Promotional/non-English grep found README.md:3 linking README_CN.md; README.md:11-37 sponsor/promotional content and brands PackyCode, AICodeMirror, BmoPlus, VisionCoder with discount/promo/invitecode/aff= terms."
+      ],
+      "reason": "Repository docs are not English-only/non-promotional: README still includes a Chinese README link and sponsor/promotional sections/terms."
+    }
+  ],
+  "commandsRun": [
+    {
+      "command": "mkdir -p mission evidence and report directories",
+      "exitCode": 0,
+      "observation": "Created assigned output directories only."
+    },
+    {
+      "command": "rg static evidence collection for x.ai, Z.AI, OpenCode, local proxy, and promo terms > static-grep-evidence.txt",
+      "exitCode": 0,
+      "observation": "Collected snippets and grep observations into mission evidence file."
+    },
+    {
+      "command": "go test ./internal/registry ./internal/store ./sdk/auth",
+      "exitCode": 0,
+      "observation": "Local targeted tests passed; no live upstream calls or persistent service."
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0,
+      "observation": "Whitespace check passed for current diff."
+    }
+  ],
+  "toolsUsed": [
+    "Read",
+    "Grep",
+    "Execute",
+    "TodoWrite"
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Validated 9 auth documentation assertions: 8 passed and 1 failed (VAL-DOCS-009 due remaining non-English link and promotional sponsor content in README)."
+}

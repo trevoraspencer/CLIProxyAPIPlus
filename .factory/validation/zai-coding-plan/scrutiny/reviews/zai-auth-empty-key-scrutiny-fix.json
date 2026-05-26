@@ -1,0 +1,34 @@
+{
+  "featureId": "zai-auth-empty-key-scrutiny-fix",
+  "reviewedAt": "2026-05-17T21:29:45Z",
+  "commitId": "8edb66f010b5550f7b98b8a3d54235587a8209d1",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix commit addresses the prior VAL-ZAI-004 blockers: internal/store Z.AI normalization now marks missing/blank API-key records disabled for the shared file/git/object/postgres loader path, sdk/auth filestore mirrors that guard, and Z.AI executor Execute, ExecuteStream, PrepareRequest, and HttpRequest reject empty keys before dispatch. Local mocked/unit coverage was added for internal/store, sdk/auth, and executor zero-upstream-request behavior, with no docs/config changes, secret material, or live upstream validation in the reviewed diff. One minor consistency edge remains around duplicate snake_case/kebab-case key precedence, but it does not reintroduce the prior active-empty-key routing failure.",
+    "issues": [
+      {
+        "file": "internal/store/zai_auth.go",
+        "line": 20,
+        "severity": "non_blocking",
+        "description": "The internal/store helper checks api-key only in an else-if after api_key. If an auth file contains a blank api_key plus a valid api-key, the valid kebab-case key is ignored and the auth is disabled. The watcher synthesizer fallback introduced in the original hardening commit checks api-key when api_key trims empty, so this duplicate normalization is not perfectly aligned; add a regression test if mixed-key files should be accepted. This is not blocking for the scrutiny fix because missing/blank keys no longer become active/routable and individual valid snake_case and kebab-case files are covered."
+      },
+      {
+        "file": "sdk/auth/filestore.go",
+        "line": 286,
+        "severity": "non_blocking",
+        "description": "The SDK filestore duplicate helper has the same else-if behavior as internal/store: a blank api_key prevents fallback to a valid api-key in the same file. This can unnecessarily disable a mixed-key file but does not allow an empty API key to route or dispatch upstream."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "Reusable library notes identify Z.AI as first-class API-key auth but do not record that Z.AI auth-file normalization must remain consistent across watcher synthesis, internal/store backends, sdk/auth filestore, and executor pre-dispatch validation. Mission AGENTS.md does document this for the current mission, but future workers outside this mission would have to rediscover the multi-path requirement.",
+      "evidence": ".factory/library/providers.md lists Z.AI auth/base URL/path facts only; .factory/library/architecture.md lists Z.AI as first-class. /Users/trevor/.factory/missions/1b7d85bc-f3a7-4537-8c69-c019de14064d/AGENTS.md contains the detailed 'Z.AI Auth-File Hardening Guidance' spanning watcher, internal/store, sdk/auth, and executor paths."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/zai-coding-plan/scrutiny/reviews/zai-config-auth-hardening.json",
+  "summary": "Pass: the fix adequately remediates the prior blocking issues in internal/store/zai_auth.go, sdk/auth/filestore.go, and internal/runtime/executor/zai_executor.go with local/mocked tests and without live Z.AI calls or secret leakage. The only noted follow-up is a non-blocking mixed api_key/api-key precedence inconsistency between the duplicated loaders and watcher synthesis."
+}

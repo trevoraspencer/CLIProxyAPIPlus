@@ -1,0 +1,49 @@
+{
+  "milestone": "auth-docs-refresh",
+  "round": 2,
+  "status": "pass_with_deferred_assertion",
+  "assertionsSummary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "blocked": 0
+  },
+  "passedAssertions": [],
+  "failedAssertions": [
+    {
+      "id": "VAL-DOCS-009",
+      "reason": "Found 12 sponsor/referral/discount/invite-code/promotional term matches in README/docs, including README.md Sponsor section lines 11-37. Found 188 CJK/non-English lines and 5 localized docs under docs/; this violates the English-only requirement."
+    }
+  ],
+  "blockedAssertions": [],
+  "flowReports": [
+    ".factory/validation/auth-docs-refresh/user-testing/flows/auth-docs-rerun.json"
+  ],
+  "commandsRun": [
+    {
+      "command": "user-testing-flow-validator static README/docs scan for VAL-DOCS-009",
+      "exitCode": 0,
+      "observation": "Flow validator wrote auth-docs-rerun.json and evidence; it found README sponsor/promotional terms and docs/*_CN.md localized files."
+    },
+    {
+      "command": "rg README.md for Sponsor/PackyCode/AICodeMirror/BmoPlus/VisionCoder/discount/promo/aff=/invitecode/README_CN/README_JA",
+      "exitCode": 0,
+      "observation": "Confirmed README.md lines 3 and 11-37 still include Chinese README link plus sponsor/promotional content."
+    },
+    {
+      "command": "glob docs/**/*_CN.md docs/**/*_JA.md",
+      "exitCode": 0,
+      "observation": "Confirmed localized docs remain under docs/: sdk-access_CN.md, sdk-watcher_CN.md, gitlab-duo_CN.md, sdk-usage_CN.md, sdk-advanced_CN.md."
+    }
+  ],
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/auth-docs-refresh/user-testing/synthesis.json@round1",
+  "notes": "Re-run tested the prior failed assertion only. Failure remains and appears intentionally owned by later docs-cleanup milestone scope.",
+  "orchestratorOverride": {
+    "timestamp": "2026-05-17T22:19:01.621Z",
+    "decision": "defer VAL-DOCS-009 to docs-cleanup milestone",
+    "reason": "VAL-DOCS-009 depends on removing localized docs and sponsor/promotional content, which is already owned by pending docs-cleanup features. auth-docs-refresh currently claims only VAL-DOCS-001 through VAL-DOCS-008 after feature ownership correction.",
+    "movedAssertion": "VAL-DOCS-009",
+    "newOwningFeature": "repair-doc-metadata-and-final-consistency"
+  }
+}

@@ -1,0 +1,199 @@
+{
+  "groupId": "config-auth-registry",
+  "testedAt": "2026-05-17T21:38:55.375216Z",
+  "isolation": {
+    "milestone": "zai-coding-plan",
+    "missionDir": "/Users/trevor/.factory/missions/1b7d85bc-f3a7-4537-8c69-c019de14064d",
+    "repoRoot": "/Users/trevor/code/CLIProxyAPIPlus",
+    "surface": "Go tests/static checks",
+    "constraints": [
+      "No persistent services started",
+      "Did not use 127.0.0.1:8318",
+      "Did not call live api.z.ai or opencode.ai",
+      "Did not create .env/config.yaml/auth material",
+      "Wrote only report and evidence files"
+    ]
+  },
+  "toolsUsed": [
+    "Read",
+    "Grep",
+    "Glob",
+    "Execute",
+    "TodoWrite"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-ZAI-001",
+      "status": "pass",
+      "reason": "config.example.yaml contains a Z.AI GLM Coding Plan zai-api-key example with placeholder-only api-key, default Coding Plan base URL, and GLM model alias mapping; whole-file YAML and extracted commented block parse successfully.",
+      "evidence": {
+        "files": [
+          "zai-coding-plan/config-auth-registry/config-yaml-parse.txt",
+          "zai-coding-plan/config-auth-registry/config-grep.txt"
+        ],
+        "sourceRefs": [
+          "config.example.yaml:203-216"
+        ]
+      }
+    },
+    {
+      "id": "VAL-ZAI-002",
+      "status": "pass",
+      "reason": "zai.DefaultCodingBaseURL is defined as https://api.z.ai/api/coding/paas/v4 and is applied by config synthesis, file/auth-file synthesis, store/SDK file loading, and executor resolveCredentials when base-url is omitted.",
+      "evidence": {
+        "files": [
+          "zai-coding-plan/config-auth-registry/code-references.txt",
+          "zai-coding-plan/config-auth-registry/go-test-synthesizer.txt",
+          "zai-coding-plan/config-auth-registry/go-test-auth-files.txt",
+          "zai-coding-plan/config-auth-registry/go-test-zai-executor.txt"
+        ],
+        "sourceRefs": [
+          "internal/auth/zai/zai.go:5-8",
+          "internal/watcher/synthesizer/config.go:231-236",
+          "internal/watcher/synthesizer/file.go:185-189",
+          "internal/store/zai_auth.go:44-49",
+          "sdk/auth/filestore.go:310-315",
+          "internal/runtime/executor/zai_executor.go:364-375"
+        ]
+      }
+    },
+    {
+      "id": "VAL-ZAI-003",
+      "status": "pass",
+      "reason": "zai-api-key config synthesizes active first-class provider zai auth records with label zai-apikey, auth_kind=apikey, api/base attributes, source, prefix/proxy/priority/header/models_hash/exclusion/disable-cooling metadata, and skips blank API keys.",
+      "evidence": {
+        "files": [
+          "zai-coding-plan/config-auth-registry/code-references.txt",
+          "zai-coding-plan/config-auth-registry/go-test-synthesizer.txt"
+        ],
+        "sourceRefs": [
+          "internal/config/config.go:150-151",
+          "internal/config/config.go:524-547",
+          "internal/watcher/synthesizer/config.go:219-269",
+          "internal/watcher/synthesizer/config_test.go:318-386"
+        ]
+      }
+    },
+    {
+      "id": "VAL-ZAI-004",
+      "status": "pass",
+      "reason": "File-backed type:zai auth is handled as API-key auth in synthesizer, internal store, SDK filestore, and file/git/object/postgres store paths; tests cover api_key/api-key, base_url/base-url defaulting, valid key preservation, and missing/blank unusable entries.",
+      "evidence": {
+        "files": [
+          "zai-coding-plan/config-auth-registry/code-references.txt",
+          "zai-coding-plan/config-auth-registry/go-test-synthesizer.txt",
+          "zai-coding-plan/config-auth-registry/go-test-auth-files.txt"
+        ],
+        "sourceRefs": [
+          "internal/watcher/synthesizer/file.go:175-205",
+          "internal/store/zai_auth.go:10-53",
+          "internal/store/gitstore.go:499",
+          "internal/store/objectstore.go:606",
+          "internal/store/postgresstore.go:321",
+          "sdk/auth/filestore.go:271-319",
+          "internal/store/zai_auth_test.go:10-93",
+          "sdk/auth/filestore_test.go:90-153"
+        ]
+      }
+    },
+    {
+      "id": "VAL-ZAI-005",
+      "status": "pass",
+      "reason": "Static registry exposes glm-5.1, glm-5, and glm-5-turbo as Type/OwnedBy zai, supports /chat/completions, and advertises thinking metadata; TestZAIStaticModels passed.",
+      "evidence": {
+        "files": [
+          "zai-coding-plan/config-auth-registry/code-references.txt",
+          "zai-coding-plan/config-auth-registry/go-test-registry-alias-executor.txt"
+        ],
+        "sourceRefs": [
+          "internal/registry/model_definitions.go:84-156",
+          "internal/registry/model_definitions_test.go:71-95"
+        ]
+      }
+    },
+    {
+      "id": "VAL-ZAI-006",
+      "status": "pass",
+      "reason": "Configured ZAI aliases resolve to upstream GLM model names and remain provider-scoped without colliding with other API-key provider aliases; service model registration honors aliases and exclusions.",
+      "evidence": {
+        "files": [
+          "zai-coding-plan/config-auth-registry/go-test-registry-alias-executor.txt",
+          "zai-coding-plan/config-auth-registry/code-references.txt"
+        ],
+        "sourceRefs": [
+          "sdk/cliproxy/auth/api_key_model_alias_test.go:109-138",
+          "sdk/cliproxy/service_excluded_models_test.go:114-175",
+          "sdk/cliproxy/auth/conductor.go:1879-1919",
+          "sdk/cliproxy/service.go:1211-1215"
+        ]
+      }
+    },
+    {
+      "id": "VAL-ZAI-012",
+      "status": "pass",
+      "reason": "Provider identifier zai matches synthesized/file-backed auth records and service/runtime paths register executor.NewZAIExecutor for first-class routing; targeted executor binding test passed.",
+      "evidence": {
+        "files": [
+          "zai-coding-plan/config-auth-registry/code-references.txt",
+          "zai-coding-plan/config-auth-registry/go-test-registry-alias-executor.txt"
+        ],
+        "sourceRefs": [
+          "internal/auth/zai/zai.go:5",
+          "internal/watcher/synthesizer/config.go:255-257",
+          "sdk/cliproxy/service.go:470-471",
+          "sdk/cliproxy/service.go:638",
+          "sdk/cliproxy/service_codex_executor_binding_test.go:67-91"
+        ]
+      }
+    }
+  ],
+  "commandsRun": [
+    {
+      "command": "python3 extracted YAML parse for /Users/trevor/code/CLIProxyAPIPlus/config.example.yaml and ZAI commented block",
+      "exitCode": 0,
+      "observation": "Whole-file YAML parse and extracted ZAI commented block parse succeeded; block contains zai-api-key, Coding Plan base URL, glm-5 alias/model, and no sk- secret marker."
+    },
+    {
+      "command": "grep -nE 'zai-api-key|api\\.z\\.ai|glm-5' /Users/trevor/code/CLIProxyAPIPlus/config.example.yaml",
+      "exitCode": 0,
+      "observation": "Found Z.AI example lines including zai-api-key, placeholder API key, api.z.ai Coding Plan URL, and GLM aliases/models."
+    },
+    {
+      "command": "grep -R -nE 'DefaultCodingBaseURL|applyZAIFileAPIKeyAttributes|NewZAIExecutor|Provider = \"zai\"|GetZAIModels|RegisterExecutor\\(executor.NewZAIExecutor|resolveCredentials|zai-api-key|ZAIKey' selected source directories",
+      "exitCode": 0,
+      "observation": "Static references confirm first-class provider constant, default base URL, config/file synthesis, store paths, executor credential resolution, registry, alias handling, and executor registration."
+    },
+    {
+      "command": "go test -run 'TestConfigSynthesizer_ZAIKeys|TestConfigSynthesizer_AllProviderTypes|TestFileSynthesizer' -v /Users/trevor/code/CLIProxyAPIPlus/internal/watcher/synthesizer",
+      "exitCode": 0,
+      "observation": "Targeted synthesizer tests passed, including ZAI config synthesis, file-backed default base URL, kebab-case key, and missing/blank key skipping."
+    },
+    {
+      "command": "go test -run 'TestApplyZAIFileAPIKeyAttributes|TestFileTokenStoreList.*ZAI' -v /Users/trevor/code/CLIProxyAPIPlus/internal/store /Users/trevor/code/CLIProxyAPIPlus/sdk/auth",
+      "exitCode": 0,
+      "observation": "Targeted store and SDK auth-file tests passed for snake_case/kebab-case keys, blank/missing unusable entries, and default base URL."
+    },
+    {
+      "command": "go test -run 'TestZAIStaticModels|TestRegisterModelsForAuth_ZAIAPIKeyAliasesAndExclusions|TestAPIKeyModelAlias_MultipleProviders|TestEnsureExecutorsForAuth_ZAIRegistersFirstClassExecutor' -v /Users/trevor/code/CLIProxyAPIPlus/internal/registry /Users/trevor/code/CLIProxyAPIPlus/sdk/cliproxy /Users/trevor/code/CLIProxyAPIPlus/sdk/cliproxy/auth",
+      "exitCode": 0,
+      "observation": "Targeted registry, alias, model-listing, and executor-registration tests passed."
+    },
+    {
+      "command": "go test -run 'TestZAIExecutor' -v /Users/trevor/code/CLIProxyAPIPlus/internal/runtime/executor",
+      "exitCode": 0,
+      "observation": "Mocked/local ZAI executor tests passed, including empty API-key rejection before dispatch and local-only token counting."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Initial commented-block extraction included the following Claude section and produced a YAML parse error in transient console output.",
+      "resolved": true,
+      "resolution": "Reran extraction bounded by the next section header; final evidence file shows successful whole-file and extracted ZAI block parsing.",
+      "affectedAssertions": [
+        "VAL-ZAI-001"
+      ]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 7 assigned Z.AI config/auth/registry assertions: 7 passed, 0 failed, 0 blocked."
+}

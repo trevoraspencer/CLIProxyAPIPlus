@@ -1,0 +1,15 @@
+{
+  "featureId": "provider-auth-docs-refresh",
+  "reviewedAt": "2026-05-17T22:14:00Z",
+  "commitId": "30117be5590e40fc8ab19399d8466658b49a3aff",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The README-only change covers the assigned auth-doc refresh requirements: local proxy client credentials are separated from upstream credentials, Z.AI API-key and auth-file usage is documented with Coding Plan defaults and placeholders, and OpenCode Zen/Go remain OpenAI-compatible chat-completions-only examples. I found no blocking or non-blocking correctness issues in the reviewed diff.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed feature provider-auth-docs-refresh at commit 30117be5590e40fc8ab19399d8466658b49a3aff. The diff is limited to README.md and satisfies VAL-DOCS-003 through VAL-DOCS-009 within the auth documentation scope; the transcript shows the worker followed the config-docs-worker procedure and used local/static validation only."
+}

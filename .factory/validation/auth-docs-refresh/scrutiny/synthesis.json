@@ -1,0 +1,38 @@
+{
+  "milestone": "auth-docs-refresh",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "lint": {
+      "passed": true,
+      "command": "git diff --check",
+      "exitCode": 0
+    },
+    "test": {
+      "passed": true,
+      "command": "go test ./...",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "go build -o test-output ./cmd/server && rm test-output",
+      "exitCode": 0
+    },
+    "config_yaml_parse": {
+      "passed": true,
+      "command": "python3 -c \"import yaml, pathlib; yaml.safe_load(pathlib.Path('config.example.yaml').read_text())\"",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [],
+  "rejectedObservations": [],
+  "previousRound": null
+}

@@ -1,0 +1,283 @@
+{
+  "groupId": "cross",
+  "testedAt": "2026-05-17T22:33:15.672070+00:00",
+  "isolation": {
+    "milestone": "docs-cleanup",
+    "repoRoot": "/Users/trevor/code/CLIProxyAPIPlus",
+    "missionDir": "/Users/trevor/.factory/missions/1b7d85bc-f3a7-4537-8c69-c019de14064d",
+    "mode": "read-only/static/local validation on repository checkout",
+    "constraints": [
+      "No persistent services started",
+      "No fixed ports bound",
+      "Did not use 127.0.0.1:8318",
+      "Did not call live api.z.ai or opencode.ai",
+      "Did not create .env/config.yaml/auth material"
+    ]
+  },
+  "toolsUsed": [
+    "Read",
+    "Grep",
+    "Glob",
+    "python3",
+    "ripgrep",
+    "git",
+    "go test",
+    "go build"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-CROSS-001",
+      "title": "First-user setup journey is internally consistent",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Reviewed README.md setup journey and saved lines 115-210 snippet",
+          "expected": "English docs cover xai-oauth, zai-api-key, opencode-zen, opencode-go from auth/config through local proxy usage",
+          "observed": "README documents x.ai OAuth login, Z.AI API-key/auth-file setup, OpenCode Zen/Go openai-compatibility setup, local proxy /v1 usage, upstream-vs-local key separation, and model aliases."
+        },
+        {
+          "action": "Compared README names/aliases with config.example.yaml provider snippets",
+          "expected": "Provider names, base URLs, config keys, and aliases line up without hidden/deleted localized doc dependency",
+          "observed": "README and config both use xai-oauth/grok, zai-api-key/glm-5, opencode-zen/zen-default, and opencode-go/go-default; stale localized doc grep returned none in README/docs/AGENTS."
+        }
+      ],
+      "evidence": {
+        "files": [
+          "docs-cleanup/cross/README-auth-setup-snippets.txt",
+          "docs-cleanup/cross/config-provider-snippets.txt",
+          "docs-cleanup/cross/validation-commands.log"
+        ],
+        "consoleErrors": "not applicable: command-line/static validation",
+        "network": "No network validation was performed; commands were local/static only."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-002",
+      "title": "Z.AI and OpenCode provider boundaries remain distinct",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Inspected README/config snippets for provider families",
+          "expected": "Z.AI is first-class zai-api-key; OpenCode Zen/Go are openai-compatibility examples only",
+          "observed": "README/config show zai-api-key separately from openai-compatibility entries named opencode-zen and opencode-go."
+        },
+        {
+          "action": "Ran code search for OpenCode under internal, cmd, and sdk",
+          "expected": "No first-class OpenCode runtime/auth/translator/registry/cmd/sdk additions for Zen/Go",
+          "observed": "Only generic/pre-existing OpenCode-style comments were found; no opencode-zen/go provider code or endpoint special cases."
+        }
+      ],
+      "evidence": {
+        "files": [
+          "docs-cleanup/cross/README-auth-setup-snippets.txt",
+          "docs-cleanup/cross/config-provider-snippets.txt",
+          "docs-cleanup/cross/validation-commands.log"
+        ],
+        "consoleErrors": "not applicable: command-line/static validation",
+        "network": "No network validation was performed; commands were local/static only."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-003",
+      "title": "No live secrets are introduced or required",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Ran git status/diff checks before report generation",
+          "expected": "No untracked or modified credential material such as .env, config.yaml, auth files, or credential dumps",
+          "observed": "git status --porcelain and git diff --name-status were empty before report/evidence generation."
+        },
+        {
+          "action": "Ran secret-oriented ripgrep over docs, config, source, examples, and tests",
+          "expected": "No private keys or real-looking API/OAuth tokens",
+          "observed": "No matches; examples use placeholders such as <ZAI_API_KEY> and <OPENCODE_API_KEY>."
+        }
+      ],
+      "evidence": {
+        "files": [
+          "docs-cleanup/cross/README-auth-setup-snippets.txt",
+          "docs-cleanup/cross/config-provider-snippets.txt",
+          "docs-cleanup/cross/validation-commands.log"
+        ],
+        "consoleErrors": "not applicable: command-line/static validation",
+        "network": "No network validation was performed; commands were local/static only."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-004",
+      "title": "No live upstream validation is performed",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Reviewed validation command log and executable/static scans",
+          "expected": "No live api.z.ai/opencode.ai calls, no proxy startup, no Docker Compose execution, no 127.0.0.1:8318 usage",
+          "observed": "Validation commands were local git/rg/python/go commands only. Search found provider base URL constant and docker-build helper script strings, but no executed live upstream validation or 127.0.0.1:8318 references."
+        },
+        {
+          "action": "Ran go test ./... locally",
+          "expected": "Tests use local/mocked validation and complete without live upstream credentials",
+          "observed": "go test ./... passed with no live credential setup."
+        }
+      ],
+      "evidence": {
+        "files": [
+          "docs-cleanup/cross/README-auth-setup-snippets.txt",
+          "docs-cleanup/cross/config-provider-snippets.txt",
+          "docs-cleanup/cross/validation-commands.log"
+        ],
+        "consoleErrors": "not applicable: command-line/static validation",
+        "network": "No network validation was performed; commands were local/static only."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-005",
+      "title": "Final local validation gates pass and leave no artifacts",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Ran git diff --check",
+          "expected": "Exit code 0",
+          "observed": "Exit code 0."
+        },
+        {
+          "action": "Ran go test ./...",
+          "expected": "Exit code 0",
+          "observed": "Exit code 0; all packages passed or had no test files."
+        },
+        {
+          "action": "Ran go build -o test-output ./cmd/server && rm test-output, then test -e test-output",
+          "expected": "Build exits 0 and test-output is absent afterward",
+          "observed": "Build command exited 0; follow-up absence check exited 1, confirming test-output was removed."
+        }
+      ],
+      "evidence": {
+        "files": [
+          "docs-cleanup/cross/README-auth-setup-snippets.txt",
+          "docs-cleanup/cross/config-provider-snippets.txt",
+          "docs-cleanup/cross/validation-commands.log"
+        ],
+        "consoleErrors": "not applicable: command-line/static validation",
+        "network": "No network validation was performed; commands were local/static only."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-006",
+      "title": "Docs and config examples use matching names and aliases",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Grep/read README.md and config.example.yaml for xai-oauth, zai-api-key, opencode-zen, and opencode-go",
+          "expected": "Matching provider names/config keys/model aliases across docs and config examples",
+          "observed": "Both surfaces include xai-oauth with grok alias example, zai-api-key with glm-5 alias, opencode-zen with prefix zen/alias zen-default, and opencode-go with prefix go/alias go-default."
+        }
+      ],
+      "evidence": {
+        "files": [
+          "docs-cleanup/cross/README-auth-setup-snippets.txt",
+          "docs-cleanup/cross/config-provider-snippets.txt",
+          "docs-cleanup/cross/validation-commands.log"
+        ],
+        "consoleErrors": "not applicable: command-line/static validation",
+        "network": "No network validation was performed; commands were local/static only."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-007",
+      "title": "Config example remains parseable",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Ran whole-file YAML parse using python3/PyYAML",
+          "expected": "config.example.yaml parses successfully",
+          "observed": "Exit code 0."
+        },
+        {
+          "action": "Extracted and parsed commented provider example blocks",
+          "expected": "Commented blocks around zai-api-key, openai-compatibility OpenCode examples, and xai-oauth examples parse as YAML when uncommented",
+          "observed": "Five extracted blocks parsed successfully, including zai-api-key and OpenAI compatibility examples."
+        }
+      ],
+      "evidence": {
+        "files": [
+          "docs-cleanup/cross/README-auth-setup-snippets.txt",
+          "docs-cleanup/cross/config-provider-snippets.txt",
+          "docs-cleanup/cross/validation-commands.log"
+        ],
+        "consoleErrors": "not applicable: command-line/static validation",
+        "network": "No network validation was performed; commands were local/static only."
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "commands": [
+    {
+      "command": "git status --porcelain",
+      "exitCode": 0,
+      "observation": "Clean before writing validation report/evidence; no untracked credential artifacts."
+    },
+    {
+      "command": "git diff --name-status",
+      "exitCode": 0,
+      "observation": "No working-tree diff before report/evidence generation."
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0,
+      "observation": "Whitespace diff check passed."
+    },
+    {
+      "command": "rg -n \"xai-oauth|zai-api-key|opencode-zen|opencode-go|api\\.z\\.ai|opencode\\.ai|README_CN.md|README_JA.md|_CN.md|_JA.md\" README.md config.example.yaml docs AGENTS.md",
+      "exitCode": 0,
+      "observation": "Found expected provider/config documentation in README.md and config.example.yaml; no stale localized doc references in checked user docs/guidance."
+    },
+    {
+      "command": "rg -n -i \"opencode\" internal cmd sdk",
+      "exitCode": 0,
+      "observation": "Only generic/pre-existing OpenCode-style comments found; no opencode-zen/go first-class provider implementation or endpoint special cases."
+    },
+    {
+      "command": "rg -n \"opencode\\.ai|api\\.z\\.ai|127\\.0\\.0\\.1:8318|docker compose|docker-compose\" --glob \"*.go\" --glob \"*.sh\" --glob \"*.ps1\" --glob \"*.yml\" --glob \"*.yaml\" --glob \"!config.example.yaml\" --glob \"!.factory/**\" .",
+      "exitCode": 0,
+      "observation": "No executable live api.z.ai/opencode.ai validation calls and no 127.0.0.1:8318 references; Docker compose appears only in standalone docker-build helper scripts that were not run."
+    },
+    {
+      "command": "rg -n \"BEGIN (RSA|OPENSSH|DSA|EC|PGP) PRIVATE KEY|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}|ghp_[0-9A-Za-z]{20,}|xox[baprs]-[0-9A-Za-z-]{10,}\" README.md config.example.yaml docs internal cmd sdk examples test",
+      "exitCode": 1,
+      "observation": "No matches; exit 1 is expected for ripgrep when no secrets are found."
+    },
+    {
+      "command": "python3 -c \"import yaml, pathlib; yaml.safe_load(pathlib.Path('config.example.yaml').read_text())\"",
+      "exitCode": 0,
+      "observation": "config.example.yaml parsed as YAML."
+    },
+    {
+      "command": "python3 extracted commented provider blocks YAML validation",
+      "exitCode": 0,
+      "observation": "Extracted commented provider examples parsed: zai-api-key, OpenAI compatibility examples, and xai-oauth alias/exclusion blocks."
+    },
+    {
+      "command": "go test ./...",
+      "exitCode": 0,
+      "observation": "All local Go tests passed."
+    },
+    {
+      "command": "go build -o test-output ./cmd/server && rm test-output",
+      "exitCode": 0,
+      "observation": "Server build passed and removed temporary test-output artifact."
+    },
+    {
+      "command": "test -e test-output",
+      "exitCode": 1,
+      "observation": "Expected absence check: test-output does not exist after build cleanup."
+    }
+  ],
+  "summary": "Tested 7 cross-area assertions: 7 passed, 0 failed, 0 blocked. Static/doc checks, YAML parsing, go test ./..., git diff --check, and build cleanup gate all met the validation contract."
+}

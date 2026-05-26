@@ -1,0 +1,15 @@
+{
+  "featureId": "zai-registry-routing-registration",
+  "reviewedAt": "2026-05-17T21:18:29Z",
+  "commitId": "b63b1af19bc0e7c156aee5a317b03069f6dca5f2",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature tightens tests for the Z.AI static registry metadata, configured alias model listing/exclusion behavior, and first-class executor registration. The diff aligns with VAL-ZAI-005, VAL-ZAI-006, and VAL-ZAI-012, and existing auth alias tests cover Z.AI alias routing without cross-provider collisions.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed feature metadata, handoff, transcript skeleton, worker skill, mission/shared guidance, and commit b63b1af19bc0e7c156aee5a317b03069f6dca5f2. The implementation is test-only, local/credential-safe, follows the go-provider-worker procedure, and satisfies the assigned registry/routing/registration assertions with no blocking or non-blocking issues found."
+}
