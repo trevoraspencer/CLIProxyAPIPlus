@@ -783,6 +783,7 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	cfg.RedisUsageQueueRetentionSeconds = 60
 	cfg.DisableCooling = false
 	cfg.DisableImageGeneration = DisableImageGenerationOff
+	cfg.CodexResponseHeaderTimeout = 30
 	cfg.Pprof.Enable = false
 	cfg.Pprof.Addr = DefaultPprofAddr
 	cfg.AmpCode.RestrictManagementToLocalhost = false // Default to false: API key auth is sufficient

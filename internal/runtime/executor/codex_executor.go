@@ -237,6 +237,7 @@ func (e *CodexExecutor) HttpRequest(ctx context.Context, auth *cliproxyauth.Auth
 		return nil, err
 	}
 	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
+	ensureCodexResponseHeaderTimeout(httpClient, e.codexResponseHeaderTimeout())
 	return httpClient.Do(httpReq)
 }
 
@@ -310,9 +311,13 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 		AuthValue: authValue,
 	})
 	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
+	ensureCodexResponseHeaderTimeout(httpClient, e.codexResponseHeaderTimeout())
 	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
 		helps.RecordAPIResponseError(ctx, e.cfg, err)
+		if isCodexTimeoutError(err) {
+			helps.LogWithRequestID(ctx).Warnf("codex response header timeout: %v (auth: %s)", err, authLabel)
+		}
 		return resp, err
 	}
 	defer func() {
@@ -331,6 +336,9 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 	data, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		helps.RecordAPIResponseError(ctx, e.cfg, err)
+		if isCodexTimeoutError(err) {
+			helps.LogWithRequestID(ctx).Warnf("codex response header timeout: %v (auth: %s)", err, authLabel)
+		}
 		return resp, err
 	}
 	helps.AppendAPIResponseChunk(ctx, e.cfg, data)
@@ -466,6 +474,7 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 		AuthValue: authValue,
 	})
 	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
+	ensureCodexResponseHeaderTimeout(httpClient, e.codexResponseHeaderTimeout())
 	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
 		helps.RecordAPIResponseError(ctx, e.cfg, err)
@@ -568,9 +577,13 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 	})
 
 	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
+	ensureCodexResponseHeaderTimeout(httpClient, e.codexResponseHeaderTimeout())
 	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
 		helps.RecordAPIResponseError(ctx, e.cfg, err)
+		if isCodexTimeoutError(err) {
+			helps.LogWithRequestID(ctx).Warnf("codex response header timeout: %v (auth: %s)", err, authLabel)
+		}
 		return nil, err
 	}
 	helps.RecordAPIResponseMetadata(ctx, e.cfg, httpResp.StatusCode, httpResp.Header.Clone())
@@ -588,6 +601,9 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 		err = newCodexStatusErr(httpResp.StatusCode, data)
 		return nil, err
 	}
+	// Wrap response body with first-event timeout to prevent hangs
+	// when upstream never sends the first SSE event.
+	httpResp.Body = newCodexFirstEventReader(httpResp.Body, e.codexResponseHeaderTimeout())
 	out := make(chan cliproxyexecutor.StreamChunk)
 	go func() {
 		defer close(out)
@@ -1166,4 +1182,93 @@ func (e *CodexExecutor) resolveCodexConfig(auth *cliproxyauth.Auth) *config.Code
 		}
 	}
 	return nil
+}
+
+// codexResponseHeaderTimeout returns the configured response header timeout
+// for Codex OAuth /responses requests. Defaults to 30 seconds.
+func (e *CodexExecutor) codexResponseHeaderTimeout() time.Duration {
+	if e.cfg != nil && e.cfg.CodexResponseHeaderTimeout > 0 {
+		return time.Duration(e.cfg.CodexResponseHeaderTimeout) * time.Second
+	}
+	return 30 * time.Second
+}
+
+// isCodexTimeoutError returns true if the error is a network timeout,
+// such as a response header timeout from http.Transport.ResponseHeaderTimeout.
+func isCodexTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// http.Transport.ResponseHeaderTimeout produces errors with "timeout"
+	// in the message.
+	return strings.Contains(err.Error(), "timeout")
+}
+
+// ensureCodexResponseHeaderTimeout configures the HTTP client transport with a
+// ResponseHeaderTimeout to prevent indefinite hangs when upstream never sends
+// response headers. It clones the transport to avoid mutating cached transports.
+func ensureCodexResponseHeaderTimeout(httpClient *http.Client, timeout time.Duration) {
+	var baseTransport *http.Transport
+
+	if httpClient.Transport == nil {
+		if dt, ok := http.DefaultTransport.(*http.Transport); ok {
+			baseTransport = dt
+		}
+	} else if t, ok := httpClient.Transport.(*http.Transport); ok {
+		baseTransport = t
+	}
+
+	if baseTransport == nil {
+		return
+	}
+
+	t := baseTransport.Clone()
+	t.ResponseHeaderTimeout = timeout
+	httpClient.Transport = t
+}
+
+// codexFirstEventReader wraps an io.ReadCloser to enforce a timeout on the
+// first read operation. This ensures the first SSE event arrives within the
+// configured timeout, preventing hangs when upstream accepts the connection
+// but never sends event data. Subsequent reads have no timeout.
+type codexFirstEventReader struct {
+	rc      io.ReadCloser
+	timeout time.Duration
+	first   bool
+}
+
+func newCodexFirstEventReader(rc io.ReadCloser, timeout time.Duration) *codexFirstEventReader {
+	return &codexFirstEventReader{rc: rc, timeout: timeout, first: true}
+}
+
+func (r *codexFirstEventReader) Read(p []byte) (int, error) {
+	if !r.first {
+		return r.rc.Read(p)
+	}
+	r.first = false
+
+	type result struct {
+		n   int
+		err error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		n, err := r.rc.Read(p)
+		ch <- result{n, err}
+	}()
+
+	timer := time.NewTimer(r.timeout)
+	defer timer.Stop()
+
+	select {
+	case res := <-ch:
+		return res.n, res.err
+	case <-timer.C:
+		r.rc.Close()
+		return 0, fmt.Errorf("codex: upstream did not send first SSE event within %v", r.timeout)
+	}
+}
+
+func (r *codexFirstEventReader) Close() error {
+	return r.rc.Close()
 }
