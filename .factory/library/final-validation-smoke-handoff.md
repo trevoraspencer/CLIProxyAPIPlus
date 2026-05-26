@@ -12,6 +12,23 @@ Date: 2026-05-26
 - Real DeepSeek + Droid smoke remains user-run because workers do not have authority to edit personal config or use live DeepSeek credentials.
 - A pre-existing dirty `internal/runtime/executor/codex_executor.go` change reappeared and caused initial executor/model validation builds to fail with `undefined: cliproxyauth.IsAuthBlockedForModel`. It was isolated into local stash `stash@{0}` named `pre-existing-codex-executor-worktree-change-blocking-final-validation` before final validation; this stash is not claimed as mission work.
 
+## Scope Correction: `cleanup-final-validation-artifact-scope-and-rerun`
+
+The original final-validation evidence commit (`b96b0550`) also added historical Factory documentation and validation artifacts for unrelated xAI, Z.AI, OpenCode, auth-docs, and docs-cleanup work. Those files are not DeepSeek final-validation evidence and are not claimed by this milestone.
+
+The cleanup feature intentionally removes these unrelated tracked artifact sets from the current DeepSeek evidence scope:
+
+- `.factory/docs/`
+- `.factory/validation/auth-docs-refresh/`
+- `.factory/validation/docs-cleanup/`
+- `.factory/validation/opencode-go/`
+- `.factory/validation/opencode-zen/`
+- `.factory/validation/zai-coding-plan/`
+
+The retained `.factory/validation/deepseek-droid-compat/` scrutiny reports are current milestone audit artifacts and must stay available for the scrutiny rerun. The retained `.factory/init.sh`, `.factory/services.yaml`, `.factory/skills/`, `.factory/research/`, and `.factory/library/` files are mission infrastructure or DeepSeek milestone handoff context, not unrelated historical validation evidence.
+
+This file now explicitly records the cleanup so final evidence describes every changed file set in this correction. The completion matrix below remains the final-validation handoff evidence for the DeepSeek milestone; the prior round-1 scrutiny report remains a failing audit record until scrutiny is rerun after this cleanup and the required fixes.
+
 ## Exact Validation Commands
 
 | Evidence | Command | Exit | Observation |
@@ -30,7 +47,7 @@ Date: 2026-05-26
 
 ## Changed Package to Validation Mapping
 
-This final validation feature adds only this non-secret `.factory/library/` evidence/handoff file. The Go implementation under validation was already present in the final tree and is covered by:
+The final validation handoff itself is this non-secret `.factory/library/` evidence/handoff file. The later cleanup feature changes this file and removes unrelated historical `.factory/docs/` plus non-DeepSeek `.factory/validation/` artifact directories listed in the scope-correction section above; it does not change Go packages. The Go implementation under validation was already present in the final tree and is covered by:
 
 - `./internal/runtime/executor`: E2, E6, E7, E1.
 - `./internal/watcher/synthesizer`, `./sdk/cliproxy`, `./internal/registry`, `./internal/api`, `./sdk/cliproxy/auth`: E3 and E1.
