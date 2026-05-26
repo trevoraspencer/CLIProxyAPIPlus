@@ -331,6 +331,13 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 	// are captured even when the upstream is an OpenAI-compatible provider.
 	translated, _ = sjson.SetBytes(translated, "stream_options.include_usage", true)
 
+	deepSeekReasoning := e.deepSeekReasoningEnabled(auth, baseURL)
+	var deepSeekScope deepSeekReasoningScope
+	if deepSeekReasoning {
+		deepSeekScope = deepSeekReasoningScopeFor(e, auth, deepSeekFinalPayloadModel(translated, baseModel), opts)
+		translated = deepSeekPatchRequestReasoning(translated, deepSeekScope, defaultDeepSeekReasoningCache)
+	}
+
 	url := strings.TrimSuffix(baseURL, "/") + "/chat/completions"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(translated))
 	if err != nil {
@@ -394,6 +401,10 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 		scanner := bufio.NewScanner(httpResp.Body)
 		scanner.Buffer(nil, 52_428_800) // 50MB
 		var param any
+		var deepSeekCapture *deepSeekStreamCapture
+		if deepSeekReasoning {
+			deepSeekCapture = newDeepSeekStreamCapture(deepSeekScope, defaultDeepSeekReasoningCache)
+		}
 		for scanner.Scan() {
 			line := scanner.Bytes()
 			helps.AppendAPIResponseChunk(ctx, e.cfg, line)
@@ -424,7 +435,11 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 			}
 
 			// OpenAI-compatible streams must use SSE data lines.
-			chunks := sdktranslator.TranslateStream(ctx, to, from, req.Model, opts.OriginalRequest, translated, bytes.Clone(trimmedLine), &param)
+			lineForTranslation := bytes.Clone(trimmedLine)
+			if deepSeekCapture != nil {
+				deepSeekCapture.ObserveLine(lineForTranslation)
+			}
+			chunks := sdktranslator.TranslateStream(ctx, to, from, req.Model, opts.OriginalRequest, translated, lineForTranslation, &param)
 			for i := range chunks {
 				select {
 				case out <- cliproxyexecutor.StreamChunk{Payload: chunks[i]}:
@@ -444,6 +459,9 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 			// In case the upstream close the stream without a terminal [DONE] marker.
 			// Feed a synthetic done marker through the translator so pending
 			// response.completed events are still emitted exactly once.
+			if deepSeekCapture != nil {
+				deepSeekCapture.Commit()
+			}
 			chunks := sdktranslator.TranslateStream(ctx, to, from, req.Model, opts.OriginalRequest, translated, []byte("data: [DONE]"), &param)
 			for i := range chunks {
 				select {

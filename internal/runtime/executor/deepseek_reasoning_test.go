@@ -71,7 +71,9 @@ func TestDeepSeekCacheKeyAndCacheTTLBoundConcurrent(t *testing.T) {
 	keyC := deepSeekReasoningKey{deepSeekReasoningScope: scope, ToolCallIDs: "call-c"}
 
 	cache.Store(keyA, "reason-a")
+	now = now.Add(time.Second)
 	cache.Store(keyB, "reason-b")
+	now = now.Add(time.Second)
 	cache.Store(keyC, "reason-c")
 	if cache.Len() != 2 {
 		t.Fatalf("cache len = %d, want bounded len 2", cache.Len())
