@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"sort"
 	"strings"
 	"time"
@@ -36,6 +38,105 @@ const (
 )
 
 var dataTag = []byte("data:")
+
+// AvailableCodexAuthsMetadataKey is an Options.Metadata key that carries the list
+// of available Auth candidates for Codex execution. The CodexExecutor uses this
+// list to retry with a different auth when a timeout occurs.
+const AvailableCodexAuthsMetadataKey = "codex_available_auths"
+
+// codexTimingTrace captures low-level connection timing diagnostics for Codex HTTP
+// requests. It is populated by httptrace hooks and logged on error or after
+// response completion.
+type codexTimingTrace struct {
+	dnsStart          time.Time
+	dnsDone           time.Time
+	connectStart      time.Time
+	connectDone       time.Time
+	tlsHandshakeStart time.Time
+	tlsHandshakeDone  time.Time
+	gotConn           time.Time
+	firstByte         time.Time
+	firstSSEEvent     time.Time
+	requestStart      time.Time
+}
+
+func newCodexTimingTrace() *codexTimingTrace {
+	now := time.Now()
+	return &codexTimingTrace{requestStart: now}
+}
+
+func (t *codexTimingTrace) durations() log.Fields {
+	m := make(log.Fields)
+	if t == nil {
+		return m
+	}
+	if !t.dnsDone.IsZero() && !t.dnsStart.IsZero() {
+		m["dns_ms"] = fmt.Sprintf("%d", t.dnsDone.Sub(t.dnsStart).Milliseconds())
+	}
+	if !t.connectDone.IsZero() && !t.connectStart.IsZero() {
+		m["tcp_connect_ms"] = fmt.Sprintf("%d", t.connectDone.Sub(t.connectStart).Milliseconds())
+	}
+	if !t.tlsHandshakeDone.IsZero() && !t.tlsHandshakeStart.IsZero() {
+		m["tls_handshake_ms"] = fmt.Sprintf("%d", t.tlsHandshakeDone.Sub(t.tlsHandshakeStart).Milliseconds())
+	}
+	if !t.firstByte.IsZero() && !t.requestStart.IsZero() {
+		m["ttfb_ms"] = fmt.Sprintf("%d", t.firstByte.Sub(t.requestStart).Milliseconds())
+	}
+	if !t.firstSSEEvent.IsZero() && !t.requestStart.IsZero() {
+		m["first_sse_ms"] = fmt.Sprintf("%d", t.firstSSEEvent.Sub(t.requestStart).Milliseconds())
+	}
+	if !t.gotConn.IsZero() && !t.requestStart.IsZero() {
+		m["conn_established_ms"] = fmt.Sprintf("%d", t.gotConn.Sub(t.requestStart).Milliseconds())
+	}
+	return m
+}
+
+func (t *codexTimingTrace) clientTrace() *httptrace.ClientTrace {
+	if t == nil {
+		return nil
+	}
+	return &httptrace.ClientTrace{
+		DNSStart: func(_ httptrace.DNSStartInfo) {
+			t.dnsStart = time.Now()
+		},
+		DNSDone: func(_ httptrace.DNSDoneInfo) {
+			t.dnsDone = time.Now()
+		},
+		ConnectStart: func(_, _ string) {
+			t.connectStart = time.Now()
+		},
+		ConnectDone: func(_, _ string, _ error) {
+			t.connectDone = time.Now()
+		},
+		TLSHandshakeStart: func() {
+			t.tlsHandshakeStart = time.Now()
+		},
+		TLSHandshakeDone: func(_ tls.ConnectionState, _ error) {
+			t.tlsHandshakeDone = time.Now()
+		},
+		GotConn: func(info httptrace.GotConnInfo) {
+			t.gotConn = time.Now()
+		},
+		GotFirstResponseByte: func() {
+			t.firstByte = time.Now()
+		},
+	}
+}
+
+func logCodexTiming(ctx context.Context, trace *codexTimingTrace, authLabel string, isTimeout bool) {
+	if trace == nil {
+		return
+	}
+	entry := helps.LogWithRequestID(ctx).WithFields(trace.durations())
+	msg := "codex request timing"
+	if isTimeout {
+		msg = "codex request TIMED OUT"
+	}
+	if authLabel != "" {
+		entry = entry.WithField("auth", authLabel)
+	}
+	entry.Info(msg)
+}
 
 // Streamed Codex responses may emit response.output_item.done events while leaving
 // response.completed.response.output empty. Keep the stream path aligned with the
