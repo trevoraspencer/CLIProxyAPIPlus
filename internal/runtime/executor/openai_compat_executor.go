@@ -97,6 +97,7 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 		err = statusErr{code: http.StatusUnauthorized, msg: "missing provider baseURL"}
 		return
 	}
+	xiaomiCompat := e.xiaomiEnabled(auth, baseURL)
 
 	from := opts.SourceFormat
 	to := sdktranslator.FromString("openai")
@@ -113,7 +114,13 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 	originalTranslated := sdktranslator.TranslateRequest(from, to, baseModel, originalPayload, opts.Stream)
 	translated := sdktranslator.TranslateRequest(from, to, baseModel, req.Payload, opts.Stream)
 
-	translated, err = thinking.ApplyThinking(translated, req.Model, from.String(), to.String(), e.Identifier())
+	thinkingFormat := to.String()
+	thinkingProviderKey := e.Identifier()
+	if xiaomiCompat && endpoint == "/chat/completions" {
+		thinkingFormat = "xiaomi"
+		thinkingProviderKey = "xiaomi"
+	}
+	translated, err = thinking.ApplyThinking(translated, req.Model, from.String(), thinkingFormat, thinkingProviderKey)
 	if err != nil {
 		return resp, err
 	}
@@ -126,12 +133,25 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 			translated = updated
 		}
 	}
+	if xiaomiCompat && endpoint == "/chat/completions" {
+		translated = normalizeXiaomiChatPayload(translated, originalPayloadSource, e.xiaomiWebSearchEnabled(auth))
+		if errValidate := validateXiaomiMultimodalPayload(translated); errValidate != nil {
+			err = errValidate
+			return resp, err
+		}
+	}
 
 	deepSeekReasoning := endpoint == "/chat/completions" && e.deepSeekReasoningEnabled(auth, baseURL)
 	var deepSeekScope deepSeekReasoningScope
 	if deepSeekReasoning {
 		deepSeekScope = deepSeekReasoningScopeFor(e, auth, deepSeekFinalPayloadModel(translated, baseModel), originalPayloadSource, opts)
 		translated = deepSeekPatchRequestReasoning(translated, deepSeekScope, defaultDeepSeekReasoningCache)
+	}
+	xiaomiReasoning := endpoint == "/chat/completions" && xiaomiCompat
+	var xiaomiScope deepSeekReasoningScope
+	if xiaomiReasoning {
+		xiaomiScope = xiaomiReasoningScopeFor(e, auth, deepSeekFinalPayloadModel(translated, baseModel), originalPayloadSource, opts)
+		translated = xiaomiPatchRequestReasoning(translated, xiaomiScope, defaultXiaomiReasoningCache)
 	}
 
 	url := strings.TrimSuffix(baseURL, "/") + endpoint
@@ -194,6 +214,9 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 	helps.AppendAPIResponseChunk(ctx, e.cfg, body)
 	if deepSeekReasoning {
 		deepSeekCaptureNonStreamReasoning(body, deepSeekScope, defaultDeepSeekReasoningCache)
+	}
+	if xiaomiReasoning {
+		deepSeekCaptureNonStreamReasoning(body, xiaomiScope, defaultXiaomiReasoningCache)
 	}
 	reporter.Publish(ctx, helps.ParseOpenAIUsage(body))
 	// Ensure we at least record the request even if upstream doesn't return usage
@@ -307,6 +330,7 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 		err = statusErr{code: http.StatusUnauthorized, msg: "missing provider baseURL"}
 		return nil, err
 	}
+	xiaomiCompat := e.xiaomiEnabled(auth, baseURL)
 
 	from := opts.SourceFormat
 	to := sdktranslator.FromString("openai")
@@ -318,7 +342,13 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 	originalTranslated := sdktranslator.TranslateRequest(from, to, baseModel, originalPayload, true)
 	translated := sdktranslator.TranslateRequest(from, to, baseModel, req.Payload, true)
 
-	translated, err = thinking.ApplyThinking(translated, req.Model, from.String(), to.String(), e.Identifier())
+	thinkingFormat := to.String()
+	thinkingProviderKey := e.Identifier()
+	if xiaomiCompat {
+		thinkingFormat = "xiaomi"
+		thinkingProviderKey = "xiaomi"
+	}
+	translated, err = thinking.ApplyThinking(translated, req.Model, from.String(), thinkingFormat, thinkingProviderKey)
 	if err != nil {
 		return nil, err
 	}
@@ -330,12 +360,24 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 	// Request usage data in the final streaming chunk so that token statistics
 	// are captured even when the upstream is an OpenAI-compatible provider.
 	translated, _ = sjson.SetBytes(translated, "stream_options.include_usage", true)
+	if xiaomiCompat {
+		translated = normalizeXiaomiChatPayload(translated, originalPayloadSource, e.xiaomiWebSearchEnabled(auth))
+		if errValidate := validateXiaomiMultimodalPayload(translated); errValidate != nil {
+			return nil, errValidate
+		}
+	}
 
 	deepSeekReasoning := e.deepSeekReasoningEnabled(auth, baseURL)
 	var deepSeekScope deepSeekReasoningScope
 	if deepSeekReasoning {
 		deepSeekScope = deepSeekReasoningScopeFor(e, auth, deepSeekFinalPayloadModel(translated, baseModel), originalPayloadSource, opts)
 		translated = deepSeekPatchRequestReasoning(translated, deepSeekScope, defaultDeepSeekReasoningCache)
+	}
+	xiaomiReasoning := xiaomiCompat
+	var xiaomiScope deepSeekReasoningScope
+	if xiaomiReasoning {
+		xiaomiScope = xiaomiReasoningScopeFor(e, auth, deepSeekFinalPayloadModel(translated, baseModel), originalPayloadSource, opts)
+		translated = xiaomiPatchRequestReasoning(translated, xiaomiScope, defaultXiaomiReasoningCache)
 	}
 
 	url := strings.TrimSuffix(baseURL, "/") + "/chat/completions"
@@ -405,6 +447,10 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 		if deepSeekReasoning {
 			deepSeekCapture = newDeepSeekStreamCapture(deepSeekScope, defaultDeepSeekReasoningCache)
 		}
+		var xiaomiCapture *deepSeekStreamCapture
+		if xiaomiReasoning {
+			xiaomiCapture = newDeepSeekStreamCapture(xiaomiScope, defaultXiaomiReasoningCache)
+		}
 		for scanner.Scan() {
 			line := scanner.Bytes()
 			helps.AppendAPIResponseChunk(ctx, e.cfg, line)
@@ -439,6 +485,9 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 			if deepSeekCapture != nil {
 				deepSeekCapture.ObserveLine(lineForTranslation)
 			}
+			if xiaomiCapture != nil {
+				xiaomiCapture.ObserveLine(lineForTranslation)
+			}
 			chunks := sdktranslator.TranslateStream(ctx, to, from, req.Model, opts.OriginalRequest, translated, lineForTranslation, &param)
 			for i := range chunks {
 				select {
@@ -461,6 +510,9 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 			// response.completed events are still emitted exactly once.
 			if deepSeekCapture != nil {
 				deepSeekCapture.Commit()
+			}
+			if xiaomiCapture != nil {
+				xiaomiCapture.Commit()
 			}
 			chunks := sdktranslator.TranslateStream(ctx, to, from, req.Model, opts.OriginalRequest, translated, []byte("data: [DONE]"), &param)
 			for i := range chunks {
@@ -601,7 +653,14 @@ func (e *OpenAICompatExecutor) CountTokens(ctx context.Context, auth *cliproxyau
 
 	modelForCounting := baseModel
 
-	translated, err := thinking.ApplyThinking(translated, req.Model, from.String(), to.String(), e.Identifier())
+	baseURL, _ := e.resolveCredentials(auth)
+	thinkingFormat := to.String()
+	thinkingProviderKey := e.Identifier()
+	if e.xiaomiEnabled(auth, baseURL) {
+		thinkingFormat = "xiaomi"
+		thinkingProviderKey = "xiaomi"
+	}
+	translated, err := thinking.ApplyThinking(translated, req.Model, from.String(), thinkingFormat, thinkingProviderKey)
 	if err != nil {
 		return cliproxyexecutor.Response{}, err
 	}

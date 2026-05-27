@@ -145,6 +145,9 @@ func openAICompatSignature(entry config.OpenAICompatibility) string {
 	if v := strings.TrimSpace(entry.BaseURL); v != "" {
 		parts = append(parts, "base="+v)
 	}
+	if entry.WebSearchEnabled {
+		parts = append(parts, "web_search_enabled=true")
+	}
 
 	models := make([]string, 0, len(entry.Models))
 	for _, model := range entry.Models {

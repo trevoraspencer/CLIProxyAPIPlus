@@ -1712,7 +1712,7 @@ func buildOpenAICompatibilityConfigModels(compat *config.OpenAICompatibility) []
 		}
 		thinking := model.Thinking
 		if thinking == nil && !model.Image {
-			thinking = &registry.ThinkingSupport{Levels: []string{"low", "medium", "high"}}
+			thinking = defaultOpenAICompatibilityThinking(compat)
 		}
 		models = append(models, &ModelInfo{
 			ID:          modelID,
@@ -1726,6 +1726,17 @@ func buildOpenAICompatibilityConfigModels(compat *config.OpenAICompatibility) []
 		})
 	}
 	return models
+}
+
+func defaultOpenAICompatibilityThinking(compat *config.OpenAICompatibility) *registry.ThinkingSupport {
+	if compat != nil && strings.EqualFold(strings.TrimSpace(compat.Name), "xiaomi") {
+		return &registry.ThinkingSupport{
+			Levels:         []string{"none", "auto", "minimal", "low", "medium", "high", "xhigh", "max"},
+			ZeroAllowed:    true,
+			DynamicAllowed: true,
+		}
+	}
+	return &registry.ThinkingSupport{Levels: []string{"low", "medium", "high"}}
 }
 
 func buildConfigModels[T modelEntry](models []T, ownedBy, modelType string) []*ModelInfo {

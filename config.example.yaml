@@ -334,6 +334,7 @@ nonstream-keepalive-interval: 0
 #     prefix: "test" # optional: require calls like "test/kimi-k2" to target this provider's credentials
 #     base-url: "https://openrouter.ai/api/v1" # The base URL of the provider.
 #     disable-cooling: false # optional: per-provider override for auth/model cooldown scheduling
+#     web-search-enabled: false # optional: allow native provider web_search tools when supported and enabled upstream
 #     headers:
 #       X-Custom-Header: "custom-value"
 #     api-key-entries:
@@ -358,6 +359,30 @@ nonstream-keepalive-interval: 0
 #         alias: "claude-opus-4.66"
 #       - name: "kimi-k2.5"
 #         alias: "claude-opus-4.66"
+#
+#   - name: "xiaomi" # Xiaomi MiMo API Console via OpenAI-compatible chat completions.
+#     disabled: false
+#     base-url: "https://api.xiaomimimo.com/v1"
+#     # Token Plan base URLs can be used instead, for example:
+#     # base-url: "https://token-plan-cn.xiaomimimo.com/v1"
+#     # base-url: "https://token-plan-sgp.xiaomimimo.com/v1"
+#     # base-url: "https://token-plan-ams.xiaomimimo.com/v1"
+#     web-search-enabled: false # set true only after enabling Xiaomi's Web Search Plugin in the console
+#     api-key-entries:
+#       - api-key: "<MIMO_API_KEY>" # pay-as-you-go keys are sk-...; token-plan keys are tp-...
+#     models:
+#       - name: "mimo-v2.5-pro"
+#         alias: "mimo-v2.5-pro"
+#         thinking:
+#           levels: ["none", "auto", "minimal", "low", "medium", "high", "xhigh", "max"]
+#           zero-allowed: true
+#           dynamic-allowed: true
+#       - name: "mimo-v2.5"
+#         alias: "mimo-v2.5"
+#         thinking:
+#           levels: ["none", "auto", "minimal", "low", "medium", "high", "xhigh", "max"]
+#           zero-allowed: true
+#           dynamic-allowed: true
 #
 #   - name: "opencode-zen" # OpenCode Zen via OpenAI-compatible chat completions only.
 #     disabled: false

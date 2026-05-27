@@ -709,6 +709,9 @@ type OpenAICompatibility struct {
 	// Headers optionally adds extra HTTP headers for requests sent to this provider.
 	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
 
+	// WebSearchEnabled allows providers with native web_search billing/plugins to receive web_search tools.
+	WebSearchEnabled bool `yaml:"web-search-enabled,omitempty" json:"web-search-enabled,omitempty"`
+
 	// DisableCooling disables auth/model cooldown scheduling for this provider when true.
 	DisableCooling bool `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
 }
