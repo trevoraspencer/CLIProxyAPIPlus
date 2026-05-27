@@ -72,6 +72,7 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 
 		pendingToolCalls := make([]interface{}, 0)
 		pendingToolCallIDs := make([]string, 0)
+		pendingReasoningParts := make([]string, 0)
 		awaitingToolOutputs := make(map[string]struct{})
 		deferredMessages := make([][]byte, 0)
 
@@ -81,6 +82,9 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 			}
 			assistantMessage := []byte(`{"role":"assistant","tool_calls":[]}`)
 			assistantMessage, _ = sjson.SetBytes(assistantMessage, "tool_calls", pendingToolCalls)
+			if len(pendingReasoningParts) > 0 {
+				assistantMessage, _ = sjson.SetBytes(assistantMessage, "reasoning_content", strings.Join(pendingReasoningParts, "\n\n"))
+			}
 			out, _ = sjson.SetRawBytes(out, "messages.-1", assistantMessage)
 			for _, id := range pendingToolCallIDs {
 				if strings.TrimSpace(id) == "" {
@@ -90,6 +94,7 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 			}
 			pendingToolCalls = pendingToolCalls[:0]
 			pendingToolCallIDs = pendingToolCallIDs[:0]
+			pendingReasoningParts = pendingReasoningParts[:0]
 		}
 		flushDeferredMessages := func() {
 			for _, message := range deferredMessages {
@@ -126,6 +131,7 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 
 			switch itemType {
 			case "message", "":
+				pendingReasoningParts = pendingReasoningParts[:0]
 				// Handle regular message conversion
 				role := item.Get("role").String()
 				if role == "developer" {
@@ -192,7 +198,13 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 					pendingToolCallIDs = append(pendingToolCallIDs, callID)
 				}
 
+			case "reasoning":
+				for _, part := range openAIResponsesReasoningTextParts(item) {
+					pendingReasoningParts = append(pendingReasoningParts, part)
+				}
+
 			case "function_call_output":
+				pendingReasoningParts = pendingReasoningParts[:0]
 				// Handle function call output conversion to tool message
 				toolMessage := []byte(`{"role":"tool","tool_call_id":"","content":""}`)
 				callID := ""
@@ -280,4 +292,23 @@ func ConvertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 	}
 
 	return out
+}
+
+func openAIResponsesReasoningTextParts(item gjson.Result) []string {
+	parts := make([]string, 0)
+	if content := strings.TrimSpace(item.Get("content").String()); content != "" {
+		parts = append(parts, content)
+	}
+	if thinking := strings.TrimSpace(item.Get("thinking").String()); thinking != "" {
+		parts = append(parts, thinking)
+	}
+	if summary := item.Get("summary"); summary.Exists() && summary.IsArray() {
+		summary.ForEach(func(_, summaryItem gjson.Result) bool {
+			if text := strings.TrimSpace(summaryItem.Get("text").String()); text != "" {
+				parts = append(parts, text)
+			}
+			return true
+		})
+	}
+	return parts
 }

@@ -312,6 +312,9 @@ func (s *ConfigSynthesizer) synthesizeOpenAICompat(ctx *SynthesisContext) []*cor
 			if compat.Priority != 0 {
 				attrs["priority"] = strconv.Itoa(compat.Priority)
 			}
+			if compat.WebSearchEnabled {
+				attrs["web_search_enabled"] = strconv.FormatBool(compat.WebSearchEnabled)
+			}
 			if key != "" {
 				attrs["api_key"] = key
 			}
@@ -353,6 +356,9 @@ func (s *ConfigSynthesizer) synthesizeOpenAICompat(ctx *SynthesisContext) []*cor
 			}
 			if compat.Priority != 0 {
 				attrs["priority"] = strconv.Itoa(compat.Priority)
+			}
+			if compat.WebSearchEnabled {
+				attrs["web_search_enabled"] = strconv.FormatBool(compat.WebSearchEnabled)
 			}
 			if hash := diff.ComputeOpenAICompatModelsHash(compat.Models); hash != "" {
 				attrs["models_hash"] = hash
