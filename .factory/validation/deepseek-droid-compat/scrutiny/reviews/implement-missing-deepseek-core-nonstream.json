@@ -1,0 +1,28 @@
+{
+  "featureId": "implement-missing-deepseek-core-nonstream",
+  "reviewedAt": "2026-05-26T05:16:15Z",
+  "commitId": "e14c3da1278b409d0c0b159f2d2e4ed334667867",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The follow-up adds the expected DeepSeek helper file, non-stream OpenAI-compatible executor hooks, and synthetic executor/cache tests, and the patching boundary is correctly before request logging/sending. However, non-stream response capture is broader than the feature contract allows: it caches any choice message with reasoning_content and tool_calls without requiring an assistant role, so malformed/ineligible upstream responses can pollute replay cache entries.",
+    "issues": [
+      {
+        "file": "internal/runtime/executor/deepseek_reasoning.go",
+        "line": 300,
+        "severity": "blocking",
+        "description": "deepSeekCaptureNonStreamReasoning does not verify choices[].message.role == \"assistant\" before caching reasoning. Lines 300-312 accept any message object with non-empty reasoning_content and non-empty tool_calls, which violates the feature requirement and VAL-DS-015/016 that non-stream capture store only eligible assistant tool-call reasoning and ignore malformed/ineligible shapes. A malformed DeepSeek response with role \"tool\", role \"user\", or no role but matching tool_call IDs could populate the cache and later be replayed into an assistant tool-call history request."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The final validation evidence file marks VAL-DS-015 and VAL-DS-016 as PASS for assistant-only non-stream capture and malformed/ineligible fixture coverage, but this review found the capture helper still lacks an assistant-role guard.",
+      "evidence": ".factory/library/final-validation-smoke-handoff.md:68-69 claims PASS for non-stream assistant-only and malformed/ineligible coverage; internal/runtime/executor/deepseek_reasoning.go:300-312 caches messages based only on reasoning_content and tool_calls."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the core/non-stream DeepSeek shim is present and mostly aligned with the requested detection/cache/patching flow, but non-stream capture can cache non-assistant or role-missing messages, which is a blocking eligibility bug against the feature contract."
+}

@@ -1,0 +1,209 @@
+{
+  "milestone": "deepseek-droid-compat",
+  "round": 1,
+  "status": "pass",
+  "generatedAt": "2026-05-26T06:34:01.113862Z",
+  "assertionsSummary": {
+    "total": 60,
+    "passed": 60,
+    "failed": 0,
+    "blocked": 0,
+    "deferredUserSmoke": 1
+  },
+  "passedAssertions": [
+    "VAL-BASE-001",
+    "VAL-BASE-002",
+    "VAL-BASE-003",
+    "VAL-BASE-004",
+    "VAL-BASE-005",
+    "VAL-BASE-006",
+    "VAL-BASE-007",
+    "VAL-BASE-008",
+    "VAL-BASE-009",
+    "VAL-BASE-010",
+    "VAL-CROSS-001",
+    "VAL-CROSS-002",
+    "VAL-CROSS-003",
+    "VAL-CROSS-004",
+    "VAL-CROSS-005",
+    "VAL-CROSS-006",
+    "VAL-CROSS-007",
+    "VAL-CROSS-008",
+    "VAL-CROSS-009",
+    "VAL-CROSS-010",
+    "VAL-DOC-001",
+    "VAL-DS-001",
+    "VAL-DS-002",
+    "VAL-DS-003",
+    "VAL-DS-004",
+    "VAL-DS-005",
+    "VAL-DS-006",
+    "VAL-DS-007",
+    "VAL-DS-008",
+    "VAL-DS-009",
+    "VAL-DS-010",
+    "VAL-DS-011",
+    "VAL-DS-012",
+    "VAL-DS-013",
+    "VAL-DS-014",
+    "VAL-DS-015",
+    "VAL-DS-016",
+    "VAL-DS-017",
+    "VAL-DS-018",
+    "VAL-DS-019",
+    "VAL-DS-020",
+    "VAL-DS-021",
+    "VAL-DS-022",
+    "VAL-DS-023",
+    "VAL-DS-024",
+    "VAL-DS-025",
+    "VAL-MODEL-001",
+    "VAL-MODEL-002",
+    "VAL-MODEL-003",
+    "VAL-MODEL-004",
+    "VAL-MODEL-005",
+    "VAL-MODEL-006",
+    "VAL-MODEL-007",
+    "VAL-MODEL-008",
+    "VAL-SMOKE-001",
+    "VAL-SMOKE-002",
+    "VAL-SMOKE-003",
+    "VAL-SMOKE-004",
+    "VAL-SMOKE-005",
+    "VAL-SMOKE-006"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "deferredUserSmokeAssertions": [
+    {
+      "id": "VAL-SMOKE-006",
+      "reason": "Real DeepSeek/Droid execution remains user-run by contract; automation is not authorized to edit personal config, use live credentials, or call upstream DeepSeek."
+    }
+  ],
+  "flowReports": [
+    ".factory/validation/deepseek-droid-compat/user-testing/flows/baseline-auth.json",
+    ".factory/validation/deepseek-droid-compat/user-testing/flows/deepseek-executor.json",
+    ".factory/validation/deepseek-droid-compat/user-testing/flows/model-listing.json",
+    ".factory/validation/deepseek-droid-compat/user-testing/flows/final-smoke-build.json"
+  ],
+  "commandsRun": [
+    {
+      "groupId": "baseline-auth",
+      "command": "git status --short",
+      "exitCode": 0,
+      "observation": "Output showed one modified Factory guidance artifact: `M .factory/library/user-testing.md`; no Go source files were dirty."
+    },
+    {
+      "groupId": "baseline-auth",
+      "command": "git diff --name-only HEAD",
+      "exitCode": 0,
+      "observation": "Output listed only `.factory/library/user-testing.md`; no implementation or Go package files were changed in the current diff."
+    },
+    {
+      "groupId": "baseline-auth",
+      "command": "go test ./sdk/cliproxy/auth -count=1",
+      "exitCode": 0,
+      "observation": "Passed: `ok github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth 0.565s`."
+    },
+    {
+      "groupId": "baseline-auth",
+      "command": "go test ./sdk/cliproxy/auth -run 'TestFillFirstSelectorPick|TestSchedulerPick_FillFirst|TestSchedulerPick_PromotesExpiredCooldownBeforePick|TestManager_SchedulerTracksMarkResultCooldownAndRecovery|TestSessionAffinitySelector|OpenAICompatAliasPool|ResolveModelAliasPoolFromConfigModels|ModelAliasSession|APIKeyModelAlias|OAuthModelAlias|ResolveOAuthUpstreamModel|LookupAPIKeyUpstreamModel|RequestedModelAlias|TimeoutCooldown|CodexTimeout|CodexResponseHeaderTimeout' -count=1",
+      "exitCode": 0,
+      "observation": "Passed targeted auth selector, scheduler, session-affinity, alias-pool, model-alias, and timeout/cooldown regression tests: `ok .../sdk/cliproxy/auth 0.264s`."
+    },
+    {
+      "groupId": "baseline-auth",
+      "command": "go test ./sdk/cliproxy/auth ./sdk/cliproxy ./internal/config -run 'APIKeyModelAlias|OAuthModelAlias|ResolveOAuthUpstreamModel|LookupAPIKeyUpstreamModel|RequestedModelAlias' -count=1",
+      "exitCode": 0,
+      "observation": "Passed targeted API-key/OAuth/requested-model alias tests in `./sdk/cliproxy/auth`, `./sdk/cliproxy`, and `./internal/config`."
+    },
+    {
+      "groupId": "deepseek-executor",
+      "command": "go test ./internal/runtime/executor -run 'TestDeepSeek|TestOpenAICompat' -count=1",
+      "exitCode": 0,
+      "observation": "Passed: ok github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor; DeepSeek and OpenAI-compatible executor regression tests completed. Transcript: mission evidence cmd1-test-executor.txt."
+    },
+    {
+      "groupId": "deepseek-executor",
+      "command": "go test -race ./internal/runtime/executor -run 'TestDeepSeek.*Cache|TestDeepSeek.*Concurrent' -count=1",
+      "exitCode": 0,
+      "observation": "Passed under race detector: cache TTL/bounds/concurrency-focused DeepSeek tests completed. Transcript: mission evidence cmd2-test-executor-race.txt."
+    },
+    {
+      "groupId": "deepseek-executor",
+      "command": "go test ./internal/runtime/executor -list 'DeepSeek|OpenAICompat'",
+      "exitCode": 0,
+      "observation": "Listed 17 TestDeepSeek... tests and 8 TestOpenAICompat... tests covering detection, allowlist, cache, non-stream/stream replay, non-DeepSeek pass-through, CountTokens, logs, compact/image/payload/stream regressions. Transcript: mission evidence cmd3-test-list.txt."
+    },
+    {
+      "groupId": "deepseek-executor",
+      "command": "git diff --name-only HEAD",
+      "exitCode": 0,
+      "observation": "Output listed only .factory/library/user-testing.md before this flow report was written; no Go/source changes were present in the diff-name evidence. Transcript: mission evidence cmd4-git-diff-name-only.txt."
+    },
+    {
+      "groupId": "model-listing",
+      "command": "go test ./internal/watcher/synthesizer ./sdk/cliproxy ./internal/registry ./internal/api ./sdk/cliproxy/auth -run 'OpenAICompat|DeepSeek|Model' -count=1",
+      "exitCode": 0,
+      "observation": "All five packages reported ok: internal/watcher/synthesizer, sdk/cliproxy, internal/registry, internal/api, and sdk/cliproxy/auth. Transcript: deepseek-droid-compat/model-listing/go-test-model-run.txt."
+    },
+    {
+      "groupId": "model-listing",
+      "command": "go test ./internal/watcher/synthesizer ./sdk/cliproxy ./internal/registry ./internal/api ./sdk/cliproxy/auth -list 'DeepSeek.*Model|Model.*DeepSeek|deepseek'",
+      "exitCode": 0,
+      "observation": "Listed model-listing coverage: TestDeepSeekModelListing_ConfigAuthRegistryPath, TestDeepSeekModelListing_PrefixAndForcePrefixSemantics, TestDeepSeekModelListing_NegativeAndRemovalCases, TestDeepSeekModelListing_NonDeepSeekProviderWithDeepSeekLookingUpstream, and TestDeepSeekModelListingAPIFromRegistry. Transcript: deepseek-droid-compat/model-listing/go-test-model-list.txt."
+    },
+    {
+      "groupId": "model-listing",
+      "command": "git diff --name-only HEAD",
+      "exitCode": 0,
+      "observation": "Output contained only .factory/library/user-testing.md; no Go runtime, registry, API, config, or default model catalog files were present in the diff at command time. Transcript: deepseek-droid-compat/model-listing/git-diff-name-only-head.txt."
+    },
+    {
+      "groupId": "final-smoke-build",
+      "command": "go test ./... -p 2 -parallel=4 -count=1 -timeout 10m",
+      "exitCode": 0,
+      "observation": "Full repository test suite passed; representative successful packages included internal/api, internal/registry, internal/runtime/executor, sdk/cliproxy, sdk/cliproxy/auth, and test."
+    },
+    {
+      "groupId": "final-smoke-build",
+      "command": "go build -o test-output ./cmd/server && rm test-output",
+      "exitCode": 0,
+      "observation": "Server binary built successfully and the transient test-output artifact was removed by the command."
+    },
+    {
+      "groupId": "final-smoke-build",
+      "command": "git status --short -- test-output",
+      "exitCode": 0,
+      "observation": "No output; no test-output artifact remained in the working tree."
+    },
+    {
+      "groupId": "final-smoke-build",
+      "command": "curl -sS -o /dev/null -w 'HTTP_STATUS:%{http_code}\\n' --max-time 5 http://127.0.0.1:8318/v1/models",
+      "exitCode": 0,
+      "observation": "Returned HTTP_STATUS:401 from the permitted unauthenticated readiness probe; recorded as expected running authenticated local proxy surface."
+    },
+    {
+      "groupId": "final-smoke-build",
+      "command": "git diff --check",
+      "exitCode": 0,
+      "observation": "No whitespace errors reported."
+    }
+  ],
+  "toolsUsed": [
+    "go test",
+    "git",
+    "go build",
+    "curl"
+  ],
+  "frictions": [],
+  "blockers": [],
+  "appliedUpdates": [
+    {
+      "target": ".factory/library/user-testing.md",
+      "description": "Added validation concurrency ceilings and flow validator guidance for go-test-api-cli and evidence-review surfaces before spawning subagents.",
+      "source": "setup"
+    }
+  ],
+  "previousRound": null
+}

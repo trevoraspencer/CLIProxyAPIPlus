@@ -179,6 +179,9 @@ type Manager struct {
 	// modelPoolOffsets tracks per-auth alias pool rotation state.
 	modelPoolOffsets map[string]int
 
+	// modelAliasSessionCache pins sessions to alias pool models for fill-first strategy.
+	modelAliasSessionCache *ModelAliasSessionCache
+
 	// runtimeConfig stores the latest application config for request-time decisions.
 	// It is initialized in NewManager; never Load() before first Store().
 	runtimeConfig atomic.Value
@@ -212,10 +215,21 @@ func NewManager(store Store, selector Selector, hook Hook) *Manager {
 		modelPoolOffsets: make(map[string]int),
 	}
 	// atomic.Value requires non-nil initial value.
-	manager.runtimeConfig.Store(&internalconfig.Config{})
+	manager.runtimeConfig.Store(defaultManagerRuntimeConfig())
 	manager.apiKeyModelAlias.Store(apiKeyModelAliasTable(nil))
 	manager.scheduler = newAuthScheduler(selector)
 	return manager
+}
+
+func defaultManagerRuntimeConfig() *internalconfig.Config {
+	return &internalconfig.Config{
+		SDKConfig: internalconfig.SDKConfig{
+			CodexResponseHeaderTimeout:  30,
+			CodexTimeoutRetries:         2,
+			CodexTimeoutCooldownSeconds: 30,
+			DisableImageGeneration:      internalconfig.DisableImageGenerationOff,
+		},
+	}
 }
 
 func isBuiltInSelector(selector Selector) bool {
@@ -389,10 +403,47 @@ func (m *Manager) SetConfig(cfg *internalconfig.Config) {
 		cfg = &internalconfig.Config{}
 	}
 	m.runtimeConfig.Store(cfg)
+
+	m.updateModelAliasSessionCache(isFillFirstModelAliasStrategy(cfg.Routing.OAuthModelAliasStrategy))
 	if !cfg.Home.Enabled {
 		m.clearHomeRuntimeAuths()
 	}
 	m.rebuildAPIKeyModelAliasFromRuntimeConfig()
+}
+
+func isFillFirstModelAliasStrategy(strategy string) bool {
+	strategy = strings.ToLower(strings.TrimSpace(strategy))
+	return strategy == "fill-first" || strategy == "fillfirst" || strategy == "ff"
+}
+
+func (m *Manager) updateModelAliasSessionCache(enabled bool) {
+	if m == nil {
+		return
+	}
+	var old *ModelAliasSessionCache
+	m.mu.Lock()
+	if enabled {
+		if m.modelAliasSessionCache == nil {
+			m.modelAliasSessionCache = NewModelAliasSessionCache(30 * time.Minute)
+		}
+	} else if m.modelAliasSessionCache != nil {
+		old = m.modelAliasSessionCache
+		m.modelAliasSessionCache = nil
+	}
+	m.mu.Unlock()
+	if old != nil {
+		old.Stop()
+	}
+}
+
+func (m *Manager) getModelAliasSessionCache() *ModelAliasSessionCache {
+	if m == nil {
+		return nil
+	}
+	m.mu.RLock()
+	cache := m.modelAliasSessionCache
+	m.mu.RUnlock()
+	return cache
 }
 
 // HomeEnabled reports whether the home control plane integration is enabled in the runtime config.
@@ -548,26 +599,112 @@ func preserveRequestedModelSuffix(requestedModel, resolved string) string {
 	return preserveResolvedModelSuffix(resolved, thinking.ParseSuffix(requestedModel))
 }
 
-func (m *Manager) executionModelCandidates(auth *Auth, routeModel string) []string {
+func (m *Manager) executionModelCandidates(auth *Auth, routeModel string, sessionID string) ([]string, bool) {
 	if auth != nil && auth.Attributes != nil {
 		if homeModel := strings.TrimSpace(auth.Attributes[homeUpstreamModelAttributeKey]); homeModel != "" {
-			return []string{homeModel}
+			return []string{homeModel}, false
 		}
 	}
 	requestedModel := rewriteModelForAuth(routeModel, auth)
 	requestedModel = m.applyOAuthModelAlias(auth, requestedModel)
 	if pool := m.resolveOpenAICompatUpstreamModelPool(auth, requestedModel); len(pool) > 0 {
 		if len(pool) == 1 {
-			return pool
+			return pool, false
 		}
+
+		// Apply fill-first model alias strategy if configured.
+		if m.shouldUseFillFirstModelAlias() && sessionID != "" {
+			cache := m.getModelAliasSessionCache()
+			if cache != nil {
+				if pinnedModel, ok := cache.Get(sessionID, requestedModel); ok {
+					// Check if pinned model is still in the pool.
+					for index, model := range pool {
+						if strings.EqualFold(strings.TrimSpace(model), strings.TrimSpace(pinnedModel)) {
+							return rotateStrings(pool, index), true
+						}
+					}
+					// Pinned model is no longer in the pool; clear pin and fall through.
+					cache.Invalidate(sessionID, requestedModel)
+				}
+				return rotateStrings(pool, 0), true
+			}
+		}
+
+		// Default round-robin behavior.
 		offset := m.nextModelPoolOffset(openAICompatModelPoolKey(auth, requestedModel), len(pool))
-		return rotateStrings(pool, offset)
+		return rotateStrings(pool, offset), true
 	}
 	resolved := m.applyAPIKeyModelAlias(auth, requestedModel)
 	if strings.TrimSpace(resolved) == "" {
 		resolved = requestedModel
 	}
-	return []string{resolved}
+	return []string{resolved}, false
+}
+
+// shouldUseFillFirstModelAlias reports whether the oauth-model-alias-strategy
+// is configured for fill-first model selection within alias pools.
+func (m *Manager) shouldUseFillFirstModelAlias() bool {
+	cfg, _ := m.runtimeConfig.Load().(*internalconfig.Config)
+	if cfg == nil {
+		return false
+	}
+	return isFillFirstModelAliasStrategy(cfg.Routing.OAuthModelAliasStrategy)
+}
+
+// invalidateModelAliasPin clears a session's pinned model within an alias pool,
+// allowing the next request to fall through to the next pool member.
+func (m *Manager) invalidateModelAliasPin(sessionID, aliasName string) {
+	if sessionID == "" {
+		return
+	}
+	if cache := m.getModelAliasSessionCache(); cache != nil {
+		cache.Invalidate(sessionID, aliasName)
+	}
+}
+
+func (m *Manager) invalidateModelAliasPinForRoute(sessionID, routeModel string) {
+	if m == nil || !m.shouldUseFillFirstModelAlias() || sessionID == "" {
+		return
+	}
+	routeModel = strings.TrimSpace(routeModel)
+	if routeModel == "" {
+		return
+	}
+	m.invalidateModelAliasPin(sessionID, routeModel)
+	if index := strings.LastIndex(routeModel, "/"); index >= 0 && index < len(routeModel)-1 {
+		m.invalidateModelAliasPin(sessionID, routeModel[index+1:])
+	}
+}
+
+func (m *Manager) modelAliasPinName(auth *Auth, routeModel string) string {
+	requestedModel := rewriteModelForAuth(routeModel, auth)
+	requestedModel = m.applyOAuthModelAlias(auth, requestedModel)
+	return strings.TrimSpace(requestedModel)
+}
+
+func (m *Manager) invalidateModelAliasPinForAuth(sessionID string, auth *Auth, routeModel string) {
+	if m == nil || !m.shouldUseFillFirstModelAlias() || sessionID == "" {
+		return
+	}
+	if aliasName := m.modelAliasPinName(auth, routeModel); aliasName != "" {
+		m.invalidateModelAliasPin(sessionID, aliasName)
+	}
+}
+
+func (m *Manager) setModelAliasPinForAuth(sessionID string, auth *Auth, routeModel, upstreamModel string, pooled bool) {
+	if m == nil || !pooled || !m.shouldUseFillFirstModelAlias() || sessionID == "" {
+		return
+	}
+	cache := m.getModelAliasSessionCache()
+	if cache == nil {
+		return
+	}
+	aliasName := m.modelAliasPinName(auth, routeModel)
+	upstreamModel = strings.TrimSpace(upstreamModel)
+	if aliasName == "" || upstreamModel == "" {
+		return
+	}
+	cache.Set(sessionID, aliasName, upstreamModel)
 }
 
 func (m *Manager) selectionModelForAuth(auth *Auth, routeModel string) string {
@@ -632,14 +769,13 @@ func (m *Manager) filterExecutionModels(auth *Auth, routeModel string, candidate
 	return out
 }
 
-func (m *Manager) preparedExecutionModels(auth *Auth, routeModel string) ([]string, bool) {
-	candidates := m.executionModelCandidates(auth, routeModel)
-	pooled := len(candidates) > 1
+func (m *Manager) preparedExecutionModels(auth *Auth, routeModel string, sessionID string) ([]string, bool) {
+	candidates, pooled := m.executionModelCandidates(auth, routeModel, sessionID)
 	return m.filterExecutionModels(auth, routeModel, candidates, pooled), pooled
 }
 
-func (m *Manager) prepareExecutionModels(auth *Auth, routeModel string) []string {
-	models, _ := m.preparedExecutionModels(auth, routeModel)
+func (m *Manager) prepareExecutionModels(auth *Auth, routeModel string, sessionID string) []string {
+	models, _ := m.preparedExecutionModels(auth, routeModel, sessionID)
 	return models
 }
 
@@ -815,7 +951,7 @@ func readStreamBootstrap(ctx context.Context, ch <-chan cliproxyexecutor.StreamC
 	}
 }
 
-func (m *Manager) wrapStreamResult(ctx context.Context, auth *Auth, provider, resultModel string, headers http.Header, buffered []cliproxyexecutor.StreamChunk, remaining <-chan cliproxyexecutor.StreamChunk) *cliproxyexecutor.StreamResult {
+func (m *Manager) wrapStreamResult(ctx context.Context, auth *Auth, provider, resultModel string, headers http.Header, buffered []cliproxyexecutor.StreamChunk, remaining <-chan cliproxyexecutor.StreamChunk, sessionID, routeModel, upstreamModel string, pooled bool) *cliproxyexecutor.StreamResult {
 	out := make(chan cliproxyexecutor.StreamChunk)
 	go func() {
 		defer close(out)
@@ -859,12 +995,13 @@ func (m *Manager) wrapStreamResult(ctx context.Context, auth *Auth, provider, re
 		}
 		if !failed {
 			m.MarkResult(ctx, Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: true})
+			m.setModelAliasPinForAuth(sessionID, auth, routeModel, upstreamModel, pooled)
 		}
 	}()
 	return &cliproxyexecutor.StreamResult{Headers: headers, Chunks: out}
 }
 
-func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor ProviderExecutor, auth *Auth, provider string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, routeModel string, execModels []string, pooled bool) (*cliproxyexecutor.StreamResult, error) {
+func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor ProviderExecutor, auth *Auth, provider string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, routeModel string, execModels []string, pooled bool, sessionID string) (*cliproxyexecutor.StreamResult, error) {
 	if executor == nil {
 		return nil, &Error{Code: "executor_not_found", Message: "executor not registered"}
 	}
@@ -894,6 +1031,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 			result := Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: false, Error: rerr}
 			result.RetryAfter = retryAfterFromError(errStream)
 			m.MarkResult(ctx, result)
+			m.applyCodexTimeoutCooldownForError(ctx, provider, auth, resultModel, errStream)
 			if isRequestInvalidError(errStream) {
 				return nil, errStream
 			}
@@ -915,6 +1053,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 				result := Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: false, Error: rerr}
 				result.RetryAfter = retryAfterFromError(bootstrapErr)
 				m.MarkResult(ctx, result)
+				m.applyCodexTimeoutCooldownForError(ctx, provider, auth, resultModel, bootstrapErr)
 				discardStreamChunks(streamResult.Chunks)
 				return nil, bootstrapErr
 			}
@@ -926,6 +1065,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 				result := Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: false, Error: rerr}
 				result.RetryAfter = retryAfterFromError(bootstrapErr)
 				m.MarkResult(ctx, result)
+				m.applyCodexTimeoutCooldownForError(ctx, provider, auth, resultModel, bootstrapErr)
 				discardStreamChunks(streamResult.Chunks)
 				lastErr = bootstrapErr
 				continue
@@ -937,6 +1077,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 			result := Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: false, Error: rerr}
 			result.RetryAfter = retryAfterFromError(bootstrapErr)
 			m.MarkResult(ctx, result)
+			m.applyCodexTimeoutCooldownForError(ctx, provider, auth, resultModel, bootstrapErr)
 			discardStreamChunks(streamResult.Chunks)
 			return nil, newStreamBootstrapError(bootstrapErr, streamResult.Headers)
 		}
@@ -958,7 +1099,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 			close(closedCh)
 			remaining = closedCh
 		}
-		return m.wrapStreamResult(ctx, auth.Clone(), provider, resultModel, streamResult.Headers, buffered, remaining), nil
+		return m.wrapStreamResult(ctx, auth.Clone(), provider, resultModel, streamResult.Headers, buffered, remaining, sessionID, routeModel, execModel, pooled), nil
 	}
 	if lastErr == nil {
 		lastErr = &Error{Code: "auth_not_found", Message: "no upstream model available"}
@@ -1339,17 +1480,95 @@ func (m *Manager) ExecuteStream(ctx context.Context, providers []string, req cli
 	return nil, &Error{Code: "auth_not_found", Message: "no auth available"}
 }
 
+// codexTimeoutCooldownDuration returns the configured cooldown duration for
+// Codex auths that experienced a timeout. Default is 30 seconds.
+func (m *Manager) codexTimeoutCooldownDuration() time.Duration {
+	cfg, _ := m.runtimeConfig.Load().(*internalconfig.Config)
+	if cfg == nil {
+		return 30 * time.Second
+	}
+	return time.Duration(cfg.CodexTimeoutCooldownSeconds) * time.Second
+}
+
+// codexTimeoutRetryLimit returns the maximum number of timeout-based retries
+// allowed for Codex requests. Default is 2. Returns 0 if retries are disabled.
+func (m *Manager) codexTimeoutRetryLimit() int {
+	cfg, _ := m.runtimeConfig.Load().(*internalconfig.Config)
+	if cfg == nil {
+		return 2
+	}
+	return cfg.CodexTimeoutRetries
+}
+
+// applyCodexTimeoutCooldown applies a temporary cooldown to an auth that
+// experienced a timeout, so the selector skips it for subsequent attempts.
+func (m *Manager) applyCodexTimeoutCooldown(ctx context.Context, auth *Auth, model string) {
+	if auth == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cooldown := m.codexTimeoutCooldownDuration()
+	now := time.Now()
+	var authSnapshot *Auth
+	m.mu.Lock()
+	if current := m.auths[auth.ID]; current != nil {
+		ApplyTimeoutCooldown(current, model, cooldown, now)
+		current.UpdatedAt = now
+		_ = m.persist(ctx, current)
+		authSnapshot = current.Clone()
+	} else {
+		ApplyTimeoutCooldown(auth, model, cooldown, now)
+	}
+	m.mu.Unlock()
+	if m.scheduler != nil && authSnapshot != nil {
+		m.scheduler.upsertAuth(authSnapshot)
+	}
+}
+
+// isNetworkTimeoutError returns true if the error is a network timeout
+// (implements net.Error with Timeout() == true).
+func isNetworkTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr interface{ Timeout() bool }
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	return false
+}
+
+func shouldHandleCodexTimeout(provider string, auth *Auth, err error) bool {
+	if !isNetworkTimeoutError(err) {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(provider), "codex") {
+		return true
+	}
+	return auth != nil && strings.EqualFold(strings.TrimSpace(auth.Provider), "codex")
+}
+
+func (m *Manager) applyCodexTimeoutCooldownForError(ctx context.Context, provider string, auth *Auth, model string, err error) {
+	if shouldHandleCodexTimeout(provider, auth, err) {
+		m.applyCodexTimeoutCooldown(ctx, auth, model)
+	}
+}
+
 func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, maxRetryCredentials int) (cliproxyexecutor.Response, error) {
 	if len(providers) == 0 {
 		return cliproxyexecutor.Response{}, &Error{Code: "provider_not_found", Message: "no provider supplied"}
 	}
 	routeModel := req.Model
 	opts = ensureRequestedModelMetadata(opts, routeModel)
+	sessionID := ExtractSessionID(opts.Headers, opts.OriginalRequest, opts.Metadata)
 	homeMode := m.HomeEnabled()
 	homeAuthCount := 1
 	tried := make(map[string]struct{})
 	attempted := make(map[string]struct{})
 	var lastErr error
+	codexTimeoutCount := 0
 	for {
 		if !homeMode && maxRetryCredentials > 0 && len(attempted) >= maxRetryCredentials {
 			if lastErr != nil {
@@ -1363,6 +1582,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 		}
 		auth, executor, provider, errPick := m.pickNextMixed(ctx, providers, routeModel, pickOpts, tried)
 		if errPick != nil {
+			m.invalidateModelAliasPinForRoute(sessionID, routeModel)
 			if shouldReturnLastErrorOnPickFailure(homeMode, lastErr, errPick) {
 				return cliproxyexecutor.Response{}, lastErr
 			}
@@ -1381,7 +1601,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 		}
 		execCtx = contextWithRequestedModelAlias(execCtx, opts, routeModel)
 
-		models, pooled := m.preparedExecutionModels(auth, routeModel)
+		models, pooled := m.preparedExecutionModels(auth, routeModel, sessionID)
 		if len(models) == 0 {
 			continue
 		}
@@ -1424,6 +1644,20 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 					result.RetryAfter = ra
 				}
 				m.MarkResult(execCtx, result)
+				if shouldHandleCodexTimeout(provider, auth, errExec) {
+					m.applyCodexTimeoutCooldown(execCtx, auth, resultModel)
+					codexTimeoutCount++
+					limit := m.codexTimeoutRetryLimit()
+					if limit == 0 {
+						return cliproxyexecutor.Response{}, errExec
+					}
+					if codexTimeoutCount > limit {
+						if lastErr != nil {
+							return cliproxyexecutor.Response{}, lastErr
+						}
+						return cliproxyexecutor.Response{}, errExec
+					}
+				}
 				if isRequestInvalidError(errExec) {
 					return cliproxyexecutor.Response{}, errExec
 				}
@@ -1431,12 +1665,14 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 				continue
 			}
 			m.MarkResult(execCtx, result)
+			m.setModelAliasPinForAuth(sessionID, auth, routeModel, upstreamModel, pooled)
 			return resp, nil
 		}
 		if authErr != nil {
 			if isRequestInvalidError(authErr) {
 				return cliproxyexecutor.Response{}, authErr
 			}
+			m.invalidateModelAliasPinForAuth(sessionID, auth, routeModel)
 			lastErr = authErr
 			if homeMode {
 				homeAuthCount++
@@ -1452,11 +1688,13 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 	}
 	routeModel := req.Model
 	opts = ensureRequestedModelMetadata(opts, routeModel)
+	sessionID := ExtractSessionID(opts.Headers, opts.OriginalRequest, opts.Metadata)
 	homeMode := m.HomeEnabled()
 	homeAuthCount := 1
 	tried := make(map[string]struct{})
 	attempted := make(map[string]struct{})
 	var lastErr error
+	codexTimeoutCount := 0
 	for {
 		if !homeMode && maxRetryCredentials > 0 && len(attempted) >= maxRetryCredentials {
 			if lastErr != nil {
@@ -1470,6 +1708,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 		}
 		auth, executor, provider, errPick := m.pickNextMixed(ctx, providers, routeModel, pickOpts, tried)
 		if errPick != nil {
+			m.invalidateModelAliasPinForRoute(sessionID, routeModel)
 			if shouldReturnLastErrorOnPickFailure(homeMode, lastErr, errPick) {
 				return cliproxyexecutor.Response{}, lastErr
 			}
@@ -1488,7 +1727,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 		}
 		execCtx = contextWithRequestedModelAlias(execCtx, opts, routeModel)
 
-		models, pooled := m.preparedExecutionModels(auth, routeModel)
+		models, pooled := m.preparedExecutionModels(auth, routeModel, sessionID)
 		if len(models) == 0 {
 			continue
 		}
@@ -1523,6 +1762,20 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 					result.RetryAfter = ra
 				}
 				m.MarkResult(execCtx, result)
+				if shouldHandleCodexTimeout(provider, auth, errExec) {
+					m.applyCodexTimeoutCooldown(execCtx, auth, resultModel)
+					codexTimeoutCount++
+					limit := m.codexTimeoutRetryLimit()
+					if limit == 0 {
+						return cliproxyexecutor.Response{}, errExec
+					}
+					if codexTimeoutCount > limit {
+						if lastErr != nil {
+							return cliproxyexecutor.Response{}, lastErr
+						}
+						return cliproxyexecutor.Response{}, errExec
+					}
+				}
 				if isRequestInvalidError(errExec) {
 					return cliproxyexecutor.Response{}, errExec
 				}
@@ -1530,12 +1783,14 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 				continue
 			}
 			m.MarkResult(execCtx, result)
+			m.setModelAliasPinForAuth(sessionID, auth, routeModel, upstreamModel, pooled)
 			return resp, nil
 		}
 		if authErr != nil {
 			if isRequestInvalidError(authErr) {
 				return cliproxyexecutor.Response{}, authErr
 			}
+			m.invalidateModelAliasPinForAuth(sessionID, auth, routeModel)
 			lastErr = authErr
 			if homeMode {
 				homeAuthCount++
@@ -1551,11 +1806,13 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 	}
 	routeModel := req.Model
 	opts = ensureRequestedModelMetadata(opts, routeModel)
+	sessionID := ExtractSessionID(opts.Headers, opts.OriginalRequest, opts.Metadata)
 	homeMode := m.HomeEnabled()
 	homeAuthCount := 1
 	tried := make(map[string]struct{})
 	attempted := make(map[string]struct{})
 	var lastErr error
+	codexTimeoutCount := 0
 	for {
 		if !homeMode && maxRetryCredentials > 0 && len(attempted) >= maxRetryCredentials {
 			if lastErr != nil {
@@ -1569,6 +1826,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 		}
 		auth, executor, provider, errPick := m.pickNextMixed(ctx, providers, routeModel, pickOpts, tried)
 		if errPick != nil {
+			m.invalidateModelAliasPinForRoute(sessionID, routeModel)
 			if shouldReturnLastErrorOnPickFailure(homeMode, lastErr, errPick) {
 				return nil, lastErr
 			}
@@ -1585,7 +1843,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 			execCtx = context.WithValue(execCtx, roundTripperContextKey{}, rt)
 			execCtx = context.WithValue(execCtx, "cliproxy.roundtripper", rt)
 		}
-		models, pooled := m.preparedExecutionModels(auth, routeModel)
+		models, pooled := m.preparedExecutionModels(auth, routeModel, sessionID)
 		if len(models) == 0 {
 			continue
 		}
@@ -1601,7 +1859,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 			lastErr = errPrepare
 			continue
 		}
-		streamResult, errStream := m.executeStreamWithModelPool(execCtx, executor, auth, provider, req, opts, routeModel, models, pooled)
+		streamResult, errStream := m.executeStreamWithModelPool(execCtx, executor, auth, provider, req, opts, routeModel, models, pooled, sessionID)
 		if errStream != nil {
 			if errCtx := execCtx.Err(); errCtx != nil {
 				return nil, errCtx
@@ -1609,6 +1867,21 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 			if isRequestInvalidError(errStream) {
 				return nil, errStream
 			}
+			if shouldHandleCodexTimeout(provider, auth, errStream) {
+				codexTimeoutCount++
+				limit := m.codexTimeoutRetryLimit()
+				if limit == 0 {
+					return nil, errStream
+				}
+				if codexTimeoutCount > limit {
+					lastErr = errStream
+					if homeMode {
+						homeAuthCount++
+					}
+					continue
+				}
+			}
+			m.invalidateModelAliasPinForAuth(sessionID, auth, routeModel)
 			lastErr = errStream
 			if homeMode {
 				homeAuthCount++
@@ -3865,6 +4138,7 @@ func shouldAttemptAntigravityCreditsFallback(m *Manager, lastErr error, provider
 
 func (m *Manager) tryAntigravityCreditsExecute(ctx context.Context, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (cliproxyexecutor.Response, bool) {
 	routeModel := req.Model
+	sessionID := ExtractSessionID(opts.Headers, opts.OriginalRequest, opts.Metadata)
 	candidates := m.findAllAntigravityCreditsCandidateAuths(routeModel, opts)
 	for _, c := range candidates {
 		if ctx.Err() != nil {
@@ -3883,12 +4157,12 @@ func (m *Manager) tryAntigravityCreditsExecute(ctx context.Context, req cliproxy
 		}
 		c.auth = preparedAuth
 		publishSelectedAuthMetadata(creditsOpts.Metadata, c.auth.ID)
-		models := m.executionModelCandidates(c.auth, routeModel)
+		models, pooled := m.executionModelCandidates(c.auth, routeModel, sessionID)
 		if len(models) == 0 {
 			continue
 		}
 		for _, upstreamModel := range models {
-			resultModel := m.stateModelForExecution(c.auth, routeModel, upstreamModel, len(models) > 1)
+			resultModel := m.stateModelForExecution(c.auth, routeModel, upstreamModel, pooled)
 			execReq := req
 			execReq.Model = upstreamModel
 			resp, errExec := c.executor.Execute(creditsCtx, c.auth, execReq, creditsOpts)
@@ -3905,6 +4179,7 @@ func (m *Manager) tryAntigravityCreditsExecute(ctx context.Context, req cliproxy
 				continue
 			}
 			m.MarkResult(creditsCtx, result)
+			m.setModelAliasPinForAuth(sessionID, c.auth, routeModel, upstreamModel, pooled)
 			return resp, true
 		}
 	}
@@ -3913,6 +4188,7 @@ func (m *Manager) tryAntigravityCreditsExecute(ctx context.Context, req cliproxy
 
 func (m *Manager) tryAntigravityCreditsExecuteStream(ctx context.Context, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (*cliproxyexecutor.StreamResult, bool) {
 	routeModel := req.Model
+	sessionID := ExtractSessionID(opts.Headers, opts.OriginalRequest, opts.Metadata)
 	candidates := m.findAllAntigravityCreditsCandidateAuths(routeModel, opts)
 	for _, c := range candidates {
 		if ctx.Err() != nil {
@@ -3930,11 +4206,11 @@ func (m *Manager) tryAntigravityCreditsExecuteStream(ctx context.Context, req cl
 		}
 		c.auth = preparedAuth
 		publishSelectedAuthMetadata(creditsOpts.Metadata, c.auth.ID)
-		models := m.executionModelCandidates(c.auth, routeModel)
+		models, pooled := m.executionModelCandidates(c.auth, routeModel, sessionID)
 		if len(models) == 0 {
 			continue
 		}
-		result, errStream := m.executeStreamWithModelPool(creditsCtx, c.executor, c.auth, c.provider, req, creditsOpts, routeModel, models, len(models) > 1)
+		result, errStream := m.executeStreamWithModelPool(creditsCtx, c.executor, c.auth, c.provider, req, creditsOpts, routeModel, models, pooled, sessionID)
 		if errStream != nil {
 			continue
 		}

@@ -1,0 +1,15 @@
+{
+  "featureId": "restore-deepseek-model-listing-coverage",
+  "reviewedAt": "2026-05-26T06:00:27Z",
+  "commitId": "63eb0bd9e305c87117a88ce94d64595ad6a51003",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the fix handoff, transcript skeleton, prior failed review, prior synthesis, active-branch reachability, and commit diff for 63eb0bd9. The commit is present on the active branch, restores DeepSeek-specific model-listing tests in current HEAD, covers synthetic OpenAI-compatible config/auth/registry registration, prefix/force-prefix semantics, disabled/empty/credentialless/removed negatives, no static deepseek-v4 default, non-DeepSeek providers with DeepSeek-looking upstream names, and parsed authenticated /v1/models JSON assertions. The added credential usability guard is narrow to OpenAI-compatible model registration and is covered by the new credentialless/header-credential tests.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/config-driven-deepseek-model-listing.json",
+  "summary": "Pass: the fix adequately addresses the prior blocker that current HEAD lacked DeepSeek-specific model-listing tests. Evidence reviewed includes sdk/cliproxy/deepseek_model_listing_test.go, internal/api/server_test.go, sdk/cliproxy/service.go, the handoff/transcript skeleton, and commit reachability showing 63eb0bd9 is an ancestor of HEAD."
+}

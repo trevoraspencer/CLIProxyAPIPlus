@@ -1,0 +1,39 @@
+{
+  "featureId": "repair-codex-timeout-cooldown-compile",
+  "reviewedAt": "2026-05-26T05:15:21Z",
+  "commitId": "f16eca8c7572f2cdeaa0f8653fd62396ccc00efd",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The commit restores compilation and keeps the diff scoped to Codex timeout auth/config code, but the implemented cooldown/retry behavior is incorrect in the actual Manager execution path. The focused tests exercise the helper and config parsing directly, not the Manager flow that calls MarkResult before applying timeout cooldown.",
+    "issues": [
+      {
+        "file": "sdk/cliproxy/auth/selector.go",
+        "line": 453,
+        "severity": "blocking",
+        "description": "ApplyTimeoutCooldown only sets NextRetryAfter when the state is not already Unavailable. In the Manager paths added by this commit, MarkResult is called first on timeout (sdk/cliproxy/auth/conductor.go:1466 before :1468, and :1576 before :1578); MarkResult sets the model state Unavailable (conductor.go:2410-2412) and, for a network timeout with no HTTP status, falls through to clearing NextRetryAfter (conductor.go:2489-2490). Therefore ApplyTimeoutCooldown leaves NextRetryAfter zero and the selector will not skip the timed-out auth/model. The added tests call ApplyTimeoutCooldown directly on a fresh auth and miss this production ordering."
+      },
+      {
+        "file": "sdk/cliproxy/auth/conductor.go",
+        "line": 1346,
+        "severity": "blocking",
+        "description": "The new config semantics for disabling retries/cooldown with zero are not honored. SDKConfig documents codex-timeout-retries and codex-timeout-cooldown-seconds as zero-disable settings (internal/config/sdk_config.go:26-34), but codexTimeoutCooldownDuration returns the default 30s when the configured value is 0 (conductor.go:1346-1349), and retry limiting only runs when codexTimeoutRetryLimit() > 0 (conductor.go:1470, :1580, :1677), so codex-timeout-retries: 0 removes the timeout cap rather than disabling automatic timeout failover. The new config test only verifies that zero parses (internal/config/codex_timeout_defaults_test.go:41, :56-57), not that Manager behavior matches the documented setting."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The mission/library notes do not document the auth Manager mutation pattern that matters for feature-specific cooldowns: execution paths generally call MarkResult before custom follow-up handling, and MarkResult may set ModelState.Unavailable and clear NextRetryAfter for non-status errors. A worker changing cooldown behavior needs to account for that ordering or add Manager-level coverage.",
+      "evidence": "f16eca8 sdk/cliproxy/auth/conductor.go:1466-1468 calls MarkResult before applyCodexTimeoutCooldown; conductor.go:2410-2412 sets Unavailable; conductor.go:2489-2490 clears NextRetryAfter for default/no-status errors. .factory/library/architecture.md only records DeepSeek executor placement and does not mention auth Manager state mutation."
+    },
+    {
+      "area": "skills",
+      "observation": "go-provider-worker requires TDD for behavior changes, but the transcript skeleton shows several ApplyPatch calls before timeout verification and the resulting tests cover helper/config parsing rather than the production Manager retry/cooldown path. The skill could more explicitly require integration-level tests when modifying Manager execution loops.",
+      "evidence": "worker-transcripts.jsonl for f2da36dd shows multiple ApplyPatch tool calls followed by gofmt and go test; the handoff lists TestApplyTimeoutCooldown... and LoadConfigOptional tests only. go-provider-worker/SKILL.md step 3 says to add or tighten failing tests first."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the f16eca8c Codex timeout cooldown compile repair handoff, transcript skeleton, skill, shared state, and commit diff. The implementation compiles and is narrow, but it fails the feature's intended cooldown/retry behavior because actual Manager timeout handling does not apply cooldown after MarkResult and zero-disable config semantics are not honored."
+}

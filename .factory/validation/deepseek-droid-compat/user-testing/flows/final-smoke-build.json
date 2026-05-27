@@ -1,0 +1,114 @@
+{
+  "groupId": "final-smoke-build",
+  "surface": "go-test-api-cli+evidence-review",
+  "status": "pass",
+  "assertions": [
+    {
+      "id": "VAL-BASE-006",
+      "status": "pass",
+      "evidence": "`go test ./... -p 2 -parallel=4 -count=1 -timeout 10m` exited 0; full repository suite passed with approved resource-aware concurrency and no external-service/secret failures observed.",
+      "reason": null
+    },
+    {
+      "id": "VAL-BASE-007",
+      "status": "pass",
+      "evidence": "`go build -o test-output ./cmd/server && rm test-output` exited 0, and `git status --short -- test-output` exited 0 with no output, confirming cleanup of the transient build artifact.",
+      "reason": null
+    },
+    {
+      "id": "VAL-CROSS-001",
+      "status": "pass",
+      "evidence": "Reviewed final-validation-smoke-handoff.md: the completion matrix covers baseline repair, DeepSeek capture/patch, streaming, model listing, non-DeepSeek regressions, logging/security, automated tests, build, and user-run smoke handoff.",
+      "reason": null
+    },
+    {
+      "id": "VAL-CROSS-009",
+      "status": "pass",
+      "evidence": "Reviewed final-validation-smoke-handoff.md: assertion matrix lists every VAL-* with PASS or DEFERRED-USER-SMOKE status and exact command evidence; assigned VAL-SMOKE-006 is explicitly DEFERRED-USER-SMOKE.",
+      "reason": null
+    },
+    {
+      "id": "VAL-CROSS-010",
+      "status": "pass",
+      "evidence": "Reviewed final-validation-smoke-handoff.md: targeted executor tests, targeted config/model-listing/auth tests, full-suite test, server build, diff check, local unauth readiness probe, and deferred user smoke checklist are all present.",
+      "reason": null
+    },
+    {
+      "id": "VAL-SMOKE-001",
+      "status": "pass",
+      "evidence": "Reviewed handoff checklist: placeholder-only DeepSeek openai-compatibility config uses `<LOCAL_PROXY_API_KEY>` and `<UPSTREAM_DEEPSEEK_API_KEY>` separately and warns not to put the upstream key in top-level api-keys.",
+      "reason": null
+    },
+    {
+      "id": "VAL-SMOKE-002",
+      "status": "pass",
+      "evidence": "Reviewed handoff checklist: user is instructed to reload/restart their own proxy, then run authenticated local `curl` to `http://127.0.0.1:8318/v1/models` with `Authorization: Bearer <LOCAL_PROXY_API_KEY>` and expected `deepseek-v4` alias JSON; workers do not perform reload and command does not target api.deepseek.com.",
+      "reason": null
+    },
+    {
+      "id": "VAL-SMOKE-003",
+      "status": "pass",
+      "evidence": "Reviewed handoff checklist: Droid config uses `generic-chat-completion-api`, baseUrl `http://127.0.0.1:8318/v1`, `<LOCAL_PROXY_API_KEY>`, and model `deepseek-v4`; it explicitly avoids direct DeepSeek/API-key confusion.",
+      "reason": null
+    },
+    {
+      "id": "VAL-SMOKE-004",
+      "status": "pass",
+      "evidence": "Reviewed handoff checklist: smoke flows include simple non-tool prompt, disposable workspace file-edit/tool-call prompt, and same-session follow-up turn referencing tool results or requesting another edit.",
+      "reason": null
+    },
+    {
+      "id": "VAL-SMOKE-005",
+      "status": "pass",
+      "evidence": "Reviewed handoff checklist: user must confirm no DeepSeek missing-reasoning 400 in proxy logs, confirm DeepSeek platform usage increments, and redact keys, auth headers, bodies, hidden reasoning, auth JSON, personal config paths, and full configs if sharing evidence.",
+      "reason": null
+    },
+    {
+      "id": "VAL-SMOKE-006",
+      "status": "deferred-user-smoke",
+      "evidence": "Reviewed handoff matrix and scope: live DeepSeek/Droid smoke is explicitly marked `DEFERRED-USER-SMOKE`; no automation claimed live DeepSeek/Droid success and no user-provided sanitized live evidence was available in this assignment.",
+      "reason": "Real DeepSeek/Droid execution remains user-run by contract; automation is not authorized to edit personal config, use live credentials, or call upstream DeepSeek."
+    },
+    {
+      "id": "VAL-DOC-001",
+      "status": "pass",
+      "evidence": "Reviewed final handoff artifact: guidance is scoped to DeepSeek local-proxy/Droid smoke, uses placeholders only, separates local/upstream keys, and includes privacy redaction guidance without credentials or personal config contents.",
+      "reason": null
+    }
+  ],
+  "commands": [
+    {
+      "command": "go test ./... -p 2 -parallel=4 -count=1 -timeout 10m",
+      "exitCode": 0,
+      "observation": "Full repository test suite passed; representative successful packages included internal/api, internal/registry, internal/runtime/executor, sdk/cliproxy, sdk/cliproxy/auth, and test."
+    },
+    {
+      "command": "go build -o test-output ./cmd/server && rm test-output",
+      "exitCode": 0,
+      "observation": "Server binary built successfully and the transient test-output artifact was removed by the command."
+    },
+    {
+      "command": "git status --short -- test-output",
+      "exitCode": 0,
+      "observation": "No output; no test-output artifact remained in the working tree."
+    },
+    {
+      "command": "curl -sS -o /dev/null -w 'HTTP_STATUS:%{http_code}\\n' --max-time 5 http://127.0.0.1:8318/v1/models",
+      "exitCode": 0,
+      "observation": "Returned HTTP_STATUS:401 from the permitted unauthenticated readiness probe; recorded as expected running authenticated local proxy surface."
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0,
+      "observation": "No whitespace errors reported."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "toolsUsed": [
+    "go test",
+    "go build",
+    "curl",
+    "git"
+  ]
+}

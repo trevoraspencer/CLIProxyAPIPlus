@@ -1,0 +1,283 @@
+{
+  "milestone": "deepseek-droid-compat",
+  "round": 1,
+  "status": "fail",
+  "generatedAt": "2026-05-26T05:22:33.548727+00:00",
+  "validatorsRun": {
+    "diff_check": {
+      "passed": true,
+      "command": "git diff --check",
+      "exitCode": 0,
+      "observation": "Completed with no whitespace or conflict-marker diagnostics."
+    },
+    "auth_package": {
+      "passed": true,
+      "command": "go test ./sdk/cliproxy/auth -count=1",
+      "exitCode": 0,
+      "observation": "Auth package tests passed: ok github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth."
+    },
+    "auth_alias": {
+      "passed": true,
+      "command": "go test ./sdk/cliproxy/auth -run 'TestFillFirstSelectorPick|TestSchedulerPick_FillFirst|TestSchedulerPick_PromotesExpiredCooldownBeforePick|TestManager_SchedulerTracksMarkResultCooldownAndRecovery|TestSessionAffinitySelector|OpenAICompatAliasPool|ResolveModelAliasPoolFromConfigModels|ModelAliasSession|APIKeyModelAlias|OAuthModelAlias|ResolveOAuthUpstreamModel|LookupAPIKeyUpstreamModel|RequestedModelAlias|TimeoutCooldown|CodexTimeout|CodexResponseHeaderTimeout' -count=1",
+      "exitCode": 0,
+      "observation": "Targeted selector, scheduler, session-affinity, alias, and timeout/cooldown tests passed in sdk/cliproxy/auth."
+    },
+    "executor": {
+      "passed": true,
+      "command": "go test ./internal/runtime/executor -run 'TestDeepSeek|TestOpenAICompat' -count=1",
+      "exitCode": 0,
+      "observation": "Executor DeepSeek/OpenAI-compatible targeted test command passed."
+    },
+    "executor_race": {
+      "passed": true,
+      "command": "go test -race ./internal/runtime/executor -run 'TestDeepSeek.*Cache|TestDeepSeek.*Concurrent' -count=1",
+      "exitCode": 0,
+      "observation": "Race-enabled DeepSeek cache/concurrency targeted command passed."
+    },
+    "model_listing": {
+      "passed": true,
+      "command": "go test ./internal/watcher/synthesizer ./sdk/cliproxy ./internal/registry ./internal/api ./sdk/cliproxy/auth -run 'OpenAICompat|DeepSeek|Model' -count=1",
+      "exitCode": 0,
+      "observation": "Targeted config/model-listing/auth command passed across all listed packages; scrutiny also found current HEAD lacks DeepSeek-specific model-listing tests, recorded as a blocking review issue."
+    },
+    "full_test": {
+      "passed": true,
+      "command": "go test ./... -p 2 -parallel=4 -count=1 -timeout 10m",
+      "exitCode": 0,
+      "observation": "Full repository tests passed with approved resource-aware concurrency across all packages."
+    },
+    "build": {
+      "passed": true,
+      "command": "go build -o test-output ./cmd/server && rm test-output",
+      "exitCode": 0,
+      "observation": "Server binary built successfully and transient test-output was removed."
+    },
+    "executor_list": {
+      "passed": true,
+      "command": "go test ./internal/runtime/executor -list 'DeepSeek|OpenAICompat'",
+      "exitCode": 0,
+      "observation": "Listed TestDeepSeek and TestOpenAICompat executor tests, confirming the current tree has DeepSeek executor test names."
+    }
+  },
+  "reviewsSummary": {
+    "total": 11,
+    "passed": 1,
+    "failed": 10,
+    "passedFeatures": [
+      "finalize-auth-selector-helper-export"
+    ],
+    "failedFeatures": [
+      "config-driven-deepseek-model-listing",
+      "deepseek-detection-cache-core",
+      "deepseek-nondeepseek-token-logging-regressions",
+      "deepseek-request-patching-nonstream-capture",
+      "deepseek-streaming-capture-replay",
+      "final-validation-smoke-handoff-and-docs",
+      "implement-missing-deepseek-core-nonstream",
+      "implement-missing-deepseek-stream-regressions",
+      "repair-codex-timeout-cooldown-compile",
+      "restore-auth-alias-compile-baseline"
+    ],
+    "reviewReports": [
+      {
+        "featureId": "config-driven-deepseek-model-listing",
+        "status": "fail",
+        "commitId": "ce46507b9b3071869af6aa0e32a69917d50383f4",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/config-driven-deepseek-model-listing.json",
+        "summary": "Fail: the reviewed handoff commit adds relevant DeepSeek model-listing tests, but the commit and its test files are absent from the current branch, so the claimed config-driven model-listing coverage is not actually present. I also noted a weaker credentialless negative inside the reviewed diff and two shared-state gaps around the missing go-compat-worker skill file and stale validation evidence."
+      },
+      {
+        "featureId": "deepseek-detection-cache-core",
+        "status": "fail",
+        "commitId": "9365ad63b4df54eafe3adf738258f61e2aa8af1c",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/deepseek-detection-cache-core.json",
+        "summary": "Fail: conservative detection and basic cache bounds are present, but cache key construction does not fully enforce auth/model isolation or safe no-ID fallback behavior, leaving blocking correctness/security gaps against the feature contract."
+      },
+      {
+        "featureId": "deepseek-nondeepseek-token-logging-regressions",
+        "status": "fail",
+        "commitId": "4ccb7a3b5a40aaf70334a51f8ba2cf874b40bbfb",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/deepseek-nondeepseek-token-logging-regressions.json",
+        "summary": "Fail: the regression commit is test-only and covers several important pass-through/logging cases, but it misses blocking coverage for DeepSeek compact/non-chat cache invocation and does not exercise DeepSeek-enabled CountTokens isolation."
+      },
+      {
+        "featureId": "deepseek-request-patching-nonstream-capture",
+        "status": "fail",
+        "commitId": "bd0be1f7001b0f8b4927361924a7fbcdcb634e96",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/deepseek-request-patching-nonstream-capture.json",
+        "summary": "Failed review: the non-stream patch code in the handoff commit is broadly aligned with the feature requirements, but the commit was not on the active milestone branch, so the feature was not actually delivered to the branch under review. I also noted a non-blocking duplicate-cache-key coverage gap and two shared-state observations around branch guidance and the missing go-compat-worker skill file."
+      },
+      {
+        "featureId": "deepseek-streaming-capture-replay",
+        "status": "fail",
+        "commitId": "814f69c8b4bc50f04003600a05b0034c13ea9b0e",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/deepseek-streaming-capture-replay.json",
+        "summary": "Reviewed the feature record, handoff, transcript skeleton, commit diff, mission guidance, services/library files, and relevant DeepSeek streaming code/tests. The feature should fail scrutiny because the stream capture can commit cache entries for valid-JSON SSE error payloads and incomplete tool-call reconstructions."
+      },
+      {
+        "featureId": "final-validation-smoke-handoff-and-docs",
+        "status": "fail",
+        "commitId": "b96b0550d54bc0cc391de9486a58f8976e4ed53b",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/final-validation-smoke-handoff-and-docs.json",
+        "summary": "Fail: the final DeepSeek matrix and smoke checklist are present, but the commit is over-scoped and the evidence file incorrectly states only the handoff file was added while many unrelated Factory artifacts were committed."
+      },
+      {
+        "featureId": "finalize-auth-selector-helper-export",
+        "status": "pass",
+        "commitId": "87cfeef847168d10242c222ddcc1439ab6ba1a8e",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/finalize-auth-selector-helper-export.json",
+        "summary": "Pass: the final tree uses the idiomatic package-private isAuthBlockedForModel helper consistently within sdk/cliproxy/auth, there are no current exported-helper consumers, and the worker's verification/handoff shows the dirty selector rename was cleared without touching DeepSeek executor behavior. The only finding is a non-blocking shared-state/traceability gap around reporting successful no-new-commit cleanup features."
+      },
+      {
+        "featureId": "implement-missing-deepseek-core-nonstream",
+        "status": "fail",
+        "commitId": "e14c3da1278b409d0c0b159f2d2e4ed334667867",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/implement-missing-deepseek-core-nonstream.json",
+        "summary": "Fail: the core/non-stream DeepSeek shim is present and mostly aligned with the requested detection/cache/patching flow, but non-stream capture can cache non-assistant or role-missing messages, which is a blocking eligibility bug against the feature contract."
+      },
+      {
+        "featureId": "implement-missing-deepseek-stream-regressions",
+        "status": "fail",
+        "commitId": "87cfeef847168d10242c222ddcc1439ab6ba1a8e",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/implement-missing-deepseek-stream-regressions.json",
+        "summary": "Reviewed the handoff, transcript skeleton, commit diff, mission guidance, services/library state, and relevant executor code/tests. The implementation is not ready to pass scrutiny because streaming capture can cache reasoning from SSE error/no-choice paths and from incomplete reconstructed tool calls."
+      },
+      {
+        "featureId": "repair-codex-timeout-cooldown-compile",
+        "status": "fail",
+        "commitId": "f16eca8c7572f2cdeaa0f8653fd62396ccc00efd",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/repair-codex-timeout-cooldown-compile.json",
+        "summary": "Reviewed the f16eca8c Codex timeout cooldown compile repair handoff, transcript skeleton, skill, shared state, and commit diff. The implementation compiles and is narrow, but it fails the feature's intended cooldown/retry behavior because actual Manager timeout handling does not apply cooldown after MarkResult and zero-disable config semantics are not honored."
+      },
+      {
+        "featureId": "restore-auth-alias-compile-baseline",
+        "status": "fail",
+        "commitId": "37b75be1c21aee13807670198856a4e120338fc0",
+        "report": ".factory/validation/deepseek-droid-compat/scrutiny/reviews/restore-auth-alias-compile-baseline.json",
+        "summary": "Fail: I reviewed the feature record, handoff, transcript skeleton, archived/current skill state, mission shared state, and commit diff. The reported tests/build passed, but the reviewed commit includes unreferenced, untested Codex timeout/timing/config scaffolding that should have been isolated from the narrow auth/alias baseline repair."
+      }
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "implement-missing-deepseek-core-nonstream",
+      "severity": "blocking",
+      "description": "Current non-stream capture caches reasoning from any choice message that has non-empty reasoning_content and tool_calls without verifying role == \"assistant\". Malformed DeepSeek responses with role user/tool or no role can pollute replay cache entries.",
+      "evidence": "internal/runtime/executor/deepseek_reasoning.go deepSeekCaptureNonStreamReasoning reads message, reasoning_content, and tool_calls but has no assistant-role guard; review report implement-missing-deepseek-core-nonstream.json.",
+      "suggestedFix": "Require choices[].message.role == \"assistant\" before storing non-stream reasoning, and add negative tests for user/tool/missing-role messages."
+    },
+    {
+      "featureId": "implement-missing-deepseek-stream-regressions",
+      "severity": "blocking",
+      "description": "Streaming capture treats valid JSON SSE error objects or no-choice payloads as harmless and can commit previously observed partial reasoning/tool-call fragments on clean EOF.",
+      "evidence": "internal/runtime/executor/deepseek_stream.go ObserveLine returns when choices is absent/empty; Commit is still called on [DONE]/clean EOF. Review reports deepseek-streaming-capture-replay.json and implement-missing-deepseek-stream-regressions.json agree.",
+      "suggestedFix": "Mark the stream capture failed on SSE payloads containing an error object and ensure error/no-choice terminal paths cannot commit partial cache entries."
+    },
+    {
+      "featureId": "implement-missing-deepseek-stream-regressions",
+      "severity": "blocking",
+      "description": "Streaming Commit considers a reconstructed tool call eligible when only the ID is present; missing function name and/or arguments are stored as empty strings and keyed only by tool-call ID.",
+      "evidence": "internal/runtime/executor/deepseek_stream.go Commit checks only trimmed tool.id before appending function.name and function.arguments. Review reports identify this as violating incomplete-tool-call safety.",
+      "suggestedFix": "Track whether ID, function.name, and function.arguments fragments were observed, and skip/fail cache commit for incomplete reconstructed tool calls."
+    },
+    {
+      "featureId": "config-driven-deepseek-model-listing",
+      "severity": "blocking",
+      "description": "The current branch lacks the DeepSeek-specific model-listing tests claimed by the feature handoff, so VAL-MODEL coverage is not enforced in the tree under validation.",
+      "evidence": "Grep for deepseek-v4 in *_test.go returned no matches; glob for *deepseek*model*test.go returned no files; go test -list for the model-listing packages listed no DeepSeek model-listing tests.",
+      "suggestedFix": "Restore or recreate synthetic config/registry/API tests for DeepSeek-style OpenAI-compatible aliases, including parsed /v1/models, prefix, disabled/empty/removed/credentialless, no-hardcoded-default, and non-DeepSeek-looking-name cases."
+    },
+    {
+      "featureId": "repair-codex-timeout-cooldown-compile",
+      "severity": "blocking",
+      "description": "Codex timeout cooldown is applied after MarkResult in Manager execution paths; MarkResult can mark the model unavailable and clear NextRetryAfter, so the intended cooldown skip may not take effect in production selection.",
+      "evidence": "Review report repair-codex-timeout-cooldown-compile.json traces conductor.go MarkResult-before-ApplyTimeoutCooldown ordering and notes focused tests only call the helper directly.",
+      "suggestedFix": "Add Manager-level timeout/cooldown tests and adjust ordering/helper behavior so timeout cooldown affects subsequent auth/model selection."
+    },
+    {
+      "featureId": "repair-codex-timeout-cooldown-compile",
+      "severity": "blocking",
+      "description": "Documented zero-disable semantics for codex-timeout-retries and codex-timeout-cooldown-seconds are not honored by the implementation.",
+      "evidence": "Review report notes codexTimeoutCooldownDuration defaults when configured value is 0, and retry limiting only runs when codexTimeoutRetryLimit() > 0; parsing tests do not cover Manager behavior.",
+      "suggestedFix": "Decide and implement exact zero semantics, then cover them with config plus Manager execution tests."
+    },
+    {
+      "featureId": "final-validation-smoke-handoff-and-docs",
+      "severity": "blocking",
+      "description": "The final evidence file claims only the DeepSeek handoff was added, but commit b96b0550 changes 45 files, removes the .factory ignore rule, and commits unrelated Factory docs/validation artifacts.",
+      "evidence": "git show --stat b96b0550 shows 45 files/2886 insertions including unrelated xAI, Z.AI, OpenCode, docs-cleanup, auth-docs artifacts and .gitignore changes.",
+      "suggestedFix": "Narrow the final-validation commit/evidence to the current DeepSeek milestone artifacts or explicitly separate unrelated Factory artifact commits."
+    },
+    {
+      "featureId": "final-validation-smoke-handoff-and-docs",
+      "severity": "blocking",
+      "description": "Unrelated README/Docker planning content under .factory/docs was committed as part of the DeepSeek final-validation feature, violating the scoped placeholder-only handoff expectation.",
+      "evidence": ".factory/docs/2026-05-18-readme-accuracy-update-for-source-only-fork.md is included in b96b0550 but is unrelated to DeepSeek Droid smoke guidance.",
+      "suggestedFix": "Remove or split unrelated documentation artifacts from the DeepSeek final-validation evidence commit."
+    }
+  ],
+  "appliedUpdates": [
+    {
+      "target": "library",
+      "description": "Recorded factual architecture notes that OpenAICompatExecutor.Execute serves both chat-completions and responses/compact, and that auth Manager MarkResult ordering matters for cooldown changes.",
+      "sourceFeature": "deepseek-nondeepseek-token-logging-regressions / repair-codex-timeout-cooldown-compile"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Restore the repo-visible go-compat-worker skill or update mission feature skillName values/procedures to the available go-provider-worker so reviewers can audit the referenced skill.",
+      "evidence": "Multiple review reports could not read .factory/skills/go-compat-worker/SKILL.md while completed features declared or invoked go-compat-worker.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md / worker skills",
+      "suggestion": "Require workers to verify and record that handoff commits are ancestors of the active mission branch before marking a feature completed.",
+      "evidence": "Several early DeepSeek handoff commits were reported by reviewers as not reachable from current HEAD, forcing later follow-up implementation features.",
+      "isSystemic": true
+    },
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Clarify whether feature-specific helper files for OpenAI-compatible executor behavior may live directly in internal/runtime/executor or must be placed under internal/runtime/executor/helps/.",
+      "evidence": "DeepSeek stream helper code was placed directly in internal/runtime/executor while repository guidance says helper/supporting files under executor should be in helps/.",
+      "isSystemic": false
+    },
+    {
+      "target": "go-provider-worker skill",
+      "suggestion": "When modifying sdk/cliproxy/auth Manager execution loops or cooldown semantics, require Manager-level integration tests in addition to helper/config tests.",
+      "evidence": "Codex timeout cooldown repair passed helper/config tests but reviewers found Manager ordering prevented intended cooldown behavior.",
+      "isSystemic": false
+    },
+    {
+      "target": "mission-worker-base / validation skills",
+      "suggestion": "Clarify how successful cleanup/no-op features should report commitId, avoiding unrelated previous-HEAD commit IDs when no new commit is intentionally created.",
+      "evidence": "finalize-auth-selector-helper-export passed review but reported an unrelated prior DeepSeek streaming commit because cleanup returned the tree to HEAD without a new commit.",
+      "isSystemic": false
+    },
+    {
+      "target": "mission-worker-base / final-validation guidance",
+      "suggestion": "Clarify whether final validation workers should commit only current milestone evidence or unignore and commit all historical .factory artifacts; default should avoid unrelated artifact commits.",
+      "evidence": "b96b0550 committed broad unrelated .factory docs/validation artifacts while final evidence claimed only the DeepSeek handoff file was added.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "Repeated missing go-compat-worker observations from individual reviews.",
+      "reason": "duplicate; represented once as a systemic suggested guidance update."
+    },
+    {
+      "observation": "Historical detection-cache review blockers about empty auth/model scopes and reasoning_content in fallback hashes.",
+      "reason": "superseded in current HEAD by internal/runtime/executor/deepseek_reasoning.go requiring non-empty provider/auth/model in key.valid and excluding reasoning_content from assistant-turn hashes; current code still fails other DeepSeek assertions listed in blockingIssues."
+    },
+    {
+      "observation": "Historical non-stream patch commit was on the wrong branch.",
+      "reason": "superseded by later current-branch implementation in implement-missing-deepseek-core-nonstream; the remaining current non-stream blocker is the missing assistant-role capture guard."
+    },
+    {
+      "observation": "Historical regression review blockers for DeepSeek compact and DeepSeek CountTokens coverage.",
+      "reason": "superseded in current HEAD by endpoint == /chat/completions gating and TestDeepSeekCountTokensDoesNotPatchOrCache; not counted as current blocking issues."
+    }
+  ],
+  "previousRound": null
+}

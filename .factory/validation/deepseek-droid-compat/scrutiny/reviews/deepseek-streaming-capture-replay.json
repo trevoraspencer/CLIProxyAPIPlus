@@ -1,0 +1,39 @@
+{
+  "featureId": "deepseek-streaming-capture-replay",
+  "reviewedAt": "2026-05-26T05:16:16Z",
+  "commitId": "814f69c8b4bc50f04003600a05b0034c13ea9b0e",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The implementation adds DeepSeek streaming capture/replay wiring and useful SSE fixtures, but it can still cache reasoning from errored/no-choice SSE payloads and from incomplete reconstructed tool calls. Those behaviors violate the VAL-DS-019/VAL-DS-022 requirements that malformed/error streams and incomplete tool calls must not populate replay cache entries.",
+    "issues": [
+      {
+        "file": "internal/runtime/executor/deepseek_compat.go",
+        "line": 474,
+        "severity": "blocking",
+        "description": "SSE `data:` payloads that are valid JSON but contain an upstream error object are treated as harmless non-choice chunks: `ObserveSSELine` returns whenever `choices` is absent or not an array. After earlier eligible reasoning/tool-call fragments, `ExecuteStream` commits on clean EOF (`internal/runtime/executor/openai_compat_executor.go:452`), so a stream ending with `data: {\"error\": ...}` can populate the reasoning replay cache from an errored stream. The feature requires malformed/error streams to keep existing behavior and not commit partial cache entries."
+      },
+      {
+        "file": "internal/runtime/executor/deepseek_compat.go",
+        "line": 577,
+        "severity": "blocking",
+        "description": "`deepSeekStreamChoiceCapture.turn` considers a streamed tool call complete when `id` and `function.name` are present, but it does not require `function.arguments` to have been observed; it stores an empty string at line 588. Because the cache key for tool-call turns is based only on normalized tool-call IDs (`deepseek_compat.go:301`), a partial stream with reasoning plus id/name but missing arguments can cache and later patch a Droid replay request. VAL-DS-019 requires fragmented `function.arguments` reconstruction and says incomplete reconstructed tool calls must not populate the cache or patch later requests."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The mission guidance says DeepSeek replay belongs in the OpenAI-compatible executor path, but repository AGENTS.md also says helper/supporting files under `internal/runtime/executor/` should be placed under `internal/runtime/executor/helps/`. The worker extended `internal/runtime/executor/deepseek_compat.go` directly in the executor package, so the shared guidance is ambiguous for DeepSeek helper files.",
+      "evidence": "AGENTS.md: `internal/runtime/executor/ should contain executors and their unit tests only. Place any helper/supporting files under internal/runtime/executor/helps/`; reviewed commit adds streaming helper types/functions in `internal/runtime/executor/deepseek_compat.go`."
+    },
+    {
+      "area": "skills",
+      "observation": "The feature declares `skillName: go-compat-worker` and the worker transcript shows that skill being invoked, but the expected repo-local skill file was not available to this reviewer under `.factory/skills/go-compat-worker/SKILL.md`.",
+      "evidence": "Read of `/Users/trevor/code/CLIProxyAPIPlus/.factory/skills/go-compat-worker/SKILL.md` returned ENOENT; globbing `/Users/trevor/code/CLIProxyAPIPlus/.factory/skills` listed only `config-docs-worker`, `go-provider-worker`, and `docs-cleanup-worker`; transcript skeleton includes `Skill {\"skill\":\"go-compat-worker\"}`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the feature record, handoff, transcript skeleton, commit diff, mission guidance, services/library files, and relevant DeepSeek streaming code/tests. The feature should fail scrutiny because the stream capture can commit cache entries for valid-JSON SSE error payloads and incomplete tool-call reconstructions."
+}

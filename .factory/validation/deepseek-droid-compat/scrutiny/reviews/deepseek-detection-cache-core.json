@@ -1,0 +1,51 @@
+{
+  "featureId": "deepseek-detection-cache-core",
+  "reviewedAt": "2026-05-26T05:17:02Z",
+  "commitId": "9365ad63b4df54eafe3adf738258f61e2aa8af1c",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The commit adds focused DeepSeek detection and cache helpers with useful tests for exact provider/config/base-URL activation, host allowlist rejection, TTL/size bounds, and concurrency. However, the cache key construction still has blocking isolation and no-ID fallback flaws: it accepts empty auth/model scopes, treats blank tool-call IDs as a valid ID-keyed turn without session scope, and hashes the full captured assistant message including reasoning_content for fallback keys.",
+    "issues": [
+      {
+        "file": "internal/runtime/executor/deepseek_compat.go",
+        "line": 271,
+        "severity": "blocking",
+        "description": "deepSeekReasoningKey accepts keys even when AuthScope or Model is empty. newDeepSeekCompatIdentity leaves AuthScope empty when auth is nil, and deepSeekReasoningKey returns ok for tool-call keyed turns without validating provider/auth/final-model scope. That violates VAL-DS-011/014 because cached reasoning can be stored or replayed under an unidentified auth or missing final model, rather than isolating provider/auth/final upstream model identity."
+      },
+      {
+        "file": "internal/runtime/executor/deepseek_compat.go",
+        "line": 277,
+        "severity": "blocking",
+        "description": "The no-ID fallback guard is bypassed when ToolCallIDs is non-empty but normalizes to an empty set. The code checks len(turn.ToolCallIDs) before normalizedToolCallIDs, so inputs such as []string{\"\"} produce hashDeepSeekParts() and are treated as valid tool-call-ID keys without requiring SessionScope. Empty/invalid tool-call IDs should be handled as no-ID fallback and disabled unless a stable session scope is present."
+      },
+      {
+        "file": "internal/runtime/executor/deepseek_compat.go",
+        "line": 332,
+        "severity": "blocking",
+        "description": "AssistantTurnHash is derived from the full raw captured assistant message, including reasoning_content. A later Droid replay message is expected to omit reasoning_content, so the fallback key will not be stable across capture and replay; it also derives key material from hidden reasoning/full response bytes, contrary to the secret-minimal cache contract."
+      },
+      {
+        "file": "internal/runtime/executor/deepseek_compat_test.go",
+        "line": 203,
+        "severity": "non_blocking",
+        "description": "The final-model test only manually changes identity.Model between \"final-upstream-model\" and \"client-alias\". It does not exercise suffix, alias, prefix, or payload model override paths, so VAL-DS-012 is not fully evidenced by this feature's tests."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The reviewed feature's skillName is go-compat-worker and the transcript shows the worker invoked it, but the expected project skill file is absent, so the skill procedure could not be compared directly against the transcript/handoff.",
+      "evidence": "Read of /Users/trevor/code/CLIProxyAPIPlus/.factory/skills/go-compat-worker/SKILL.md returned ENOENT; LS .factory/skills lists only config-docs-worker, go-provider-worker, and docs-cleanup-worker. The transcript skeleton contains Skill {\"skill\":\"go-compat-worker\"}."
+    },
+    {
+      "area": "knowledge",
+      "observation": "The handoff commit for this completed feature is not contained in the current review branch, which makes it easy for a completed feature's claimed implementation to disappear from the final milestone tree unless branch inclusion is explicitly checked and recorded.",
+      "evidence": "git merge-base --is-ancestor 9365ad63b4df54eafe3adf738258f61e2aa8af1c HEAD exited 1; git branch --contains 9365ad63b4df54eafe3adf738258f61e2aa8af1c showed only pr/codex-hang-diagnostics-failover, while current HEAD is pr/codex-hang-failover."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: conservative detection and basic cache bounds are present, but cache key construction does not fully enforce auth/model isolation or safe no-ID fallback behavior, leaving blocking correctness/security gaps against the feature contract."
+}

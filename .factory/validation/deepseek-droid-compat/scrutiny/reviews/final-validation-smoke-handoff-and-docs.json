@@ -1,0 +1,39 @@
+{
+  "featureId": "final-validation-smoke-handoff-and-docs",
+  "reviewedAt": "2026-05-26T05:15:04.710395Z",
+  "commitId": "b96b0550d54bc0cc391de9486a58f8976e4ed53b",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The DeepSeek final handoff file contains the required command matrix and user-run Droid/DeepSeek smoke checklist, and no production code was changed. However, the committed diff is not scoped to that evidence: it removes the .factory ignore and commits many unrelated Factory docs/validation artifacts, while the final evidence claims only the DeepSeek handoff file was added.",
+    "issues": [
+      {
+        "file": ".factory/library/final-validation-smoke-handoff.md",
+        "line": 32,
+        "severity": "blocking",
+        "description": "The evidence claims this final validation feature adds only this non-secret handoff file, but commit b96b0550d54bc0cc391de9486a58f8976e4ed53b changes 45 files/2886 insertions, removes the .factory ignore rule, and adds unrelated .factory/docs and .factory/validation artifacts for xAI, Z.AI, OpenCode, docs-cleanup, and auth-docs milestones. That makes the final diff/status evidence inaccurate and violates the feature/VAL-DOC-001 scope requirement that completion docs/handoff updates stay limited to placeholder-only DeepSeek local-proxy/Droid guidance."
+      },
+      {
+        "file": ".factory/docs/2026-05-18-readme-accuracy-update-for-source-only-fork.md",
+        "line": 1,
+        "severity": "blocking",
+        "description": "An unrelated README/Docker planning document was committed as part of the final DeepSeek validation feature. Similar unrelated artifacts are present under .factory/docs and .factory/validation, so the documentation/handoff portion of the feature is broader than the requested placeholder-only DeepSeek smoke guidance."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The go-provider-worker skill says startup/cleanup are handled by worker-base, and the worker invoked mission-worker-base before removing the .factory ignore rule, but the repository .factory/skills directory does not contain a worker-base or mission-worker-base skill file for reviewers to inspect. This makes the claimed procedure behind committing all .factory artifacts unclear.",
+      "evidence": ".factory/skills/go-provider-worker/SKILL.md:8 references worker-base; Glob over .factory/skills found only config-docs-worker, docs-cleanup-worker, and go-provider-worker; transcript for session 13de3fcd-a62c-4b6e-8eee-a780c47d569e shows Skill mission-worker-base and later .gitignore/.factory staging."
+    },
+    {
+      "area": "conventions",
+      "observation": "There is no clear shared convention saying whether final validation workers should commit only the current evidence file or unignore and commit every historical .factory artifact. The worker handoff itself asks for this clarification, and the ambiguity led to a very broad commit outside the feature scope.",
+      "evidence": "Handoff skillFeedback.suggestedChanges asks to clarify whether final validation workers should commit all previously ignored .factory infrastructure or only the current .factory/library evidence file; git show --name-only for b96b0550 lists unrelated .factory/docs and .factory/validation files plus .gitignore removal."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the final DeepSeek matrix and smoke checklist are present, but the commit is over-scoped and the evidence file incorrectly states only the handoff file was added while many unrelated Factory artifacts were committed."
+}

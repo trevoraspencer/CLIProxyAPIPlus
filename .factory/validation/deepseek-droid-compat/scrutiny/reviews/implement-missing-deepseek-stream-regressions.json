@@ -1,0 +1,28 @@
+{
+  "featureId": "implement-missing-deepseek-stream-regressions",
+  "reviewedAt": "2026-05-26T05:15:35Z",
+  "commitId": "87cfeef847168d10242c222ddcc1439ab6ba1a8e",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature adds DeepSeek streaming capture/replay wiring and targeted regressions, but the stream capture can still commit cache entries from failed or incomplete streams. These cases violate the expected malformed/error/canceled and incomplete-tool-call safety requirements for the DeepSeek replay shim.",
+    "issues": [
+      {
+        "file": "internal/runtime/executor/deepseek_stream.go",
+        "line": 62,
+        "severity": "blocking",
+        "description": "SSE `data:` payloads that decode successfully but contain an upstream error object are treated like harmless usage/no-choice chunks because `ObserveLine` returns whenever `choices` is absent or empty. `ExecuteStream` later commits on clean EOF (`internal/runtime/executor/openai_compat_executor.go:462`), so a stream that emitted eligible reasoning/tool-call fragments followed by `data: {\"error\": ...}` can populate the replay cache from an errored stream. The expected behavior requires malformed/error streams to preserve existing behavior and avoid partial cache commits."
+      },
+      {
+        "file": "internal/runtime/executor/deepseek_stream.go",
+        "line": 143,
+        "severity": "blocking",
+        "description": "`Commit` considers a reconstructed streaming tool call complete as soon as an ID is present; missing `function.name` and missing/unfinished `function.arguments` are still stored with empty strings and then keyed only by tool-call ID. A clean EOF after a partial tool-call fragment such as `{\"index\":0,\"id\":\"call-1\"}` therefore caches reasoning and can patch a later Droid request, contrary to the requirement that incomplete reconstructed tool calls and partial streams must not populate the cache."
+      }
+    ]
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the handoff, transcript skeleton, commit diff, mission guidance, services/library state, and relevant executor code/tests. The implementation is not ready to pass scrutiny because streaming capture can cache reasoning from SSE error/no-choice paths and from incomplete reconstructed tool calls."
+}

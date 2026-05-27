@@ -1,0 +1,45 @@
+{
+  "featureId": "config-driven-deepseek-model-listing",
+  "reviewedAt": "2026-05-26T05:15:38Z",
+  "commitId": "ce46507b9b3071869af6aa0e32a69917d50383f4",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "Reviewed the handoff, transcript skeleton, and commit diff for ce46507. The diff itself adds focused DeepSeek model-listing tests, but that commit is not reachable from the current repository HEAD and the added test files are absent, so the claimed VAL-MODEL coverage is not present in the tree under validation.",
+    "issues": [
+      {
+        "file": "sdk/cliproxy/service_deepseek_model_listing_test.go",
+        "line": 1,
+        "severity": "blocking",
+        "description": "The config/auth/registry test file added by the handoff commit is absent from current HEAD. Evidence: git branch --contains ce46507b9b3071869af6aa0e32a69917d50383f4 returned no branches, git merge-base --is-ancestor ce46507b9b3071869af6aa0e32a69917d50383f4 HEAD returned 1, and current-file globbing found no sdk/cliproxy/*deepseek*model*test.go file. VAL-MODEL-001, VAL-MODEL-003, VAL-MODEL-004, VAL-MODEL-005, VAL-MODEL-006, and VAL-MODEL-008 are therefore not enforced by the current tree."
+      },
+      {
+        "file": "internal/api/deepseek_model_listing_test.go",
+        "line": 1,
+        "severity": "blocking",
+        "description": "The parsed /v1/models API test added by the handoff commit is also absent from current HEAD. Evidence: current-file globbing found no internal/api/*deepseek*model*test.go file and repository-wide grep found no TestDeepSeekOpenAICompatibilityModelsEndpointParsesConfiguredAlias. VAL-MODEL-002's authenticated parsed JSON assertion is therefore not enforced by the current tree."
+      },
+      {
+        "file": "sdk/cliproxy/service_deepseek_model_listing_test.go",
+        "line": 229,
+        "severity": "non_blocking",
+        "description": "Within the reviewed commit diff, the credentialless negative only verifies that the registry is empty before any auth registration. It does not attempt to register the synthesized credentialless auth or check /v1/models afterward, so if the commit is restored, this case should be tightened to prove a credentialless/no-usable-auth path cannot expose deepseek-v4."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The feature declares skillName go-compat-worker and the transcript skeleton shows the worker invoked go-compat-worker, but the expected skill file is not present in the current project skill directory, preventing direct comparison of the worker run against that skill procedure.",
+      "evidence": "Read of /Users/trevor/code/CLIProxyAPIPlus/.factory/skills/go-compat-worker/SKILL.md returned ENOENT; LS of /Users/trevor/code/CLIProxyAPIPlus/.factory/skills lists config-docs-worker, docs-cleanup-worker, and go-provider-worker only."
+    },
+    {
+      "area": "knowledge",
+      "observation": "The shared final-validation evidence claims VAL-MODEL assertions passed via the model-listing test command, but the actual feature commit containing those model-listing tests is not reachable from current HEAD and the test files are absent. This shared evidence appears stale or inconsistent with the current tree.",
+      "evidence": "/Users/trevor/code/CLIProxyAPIPlus/.factory/library/final-validation-smoke-handoff.md lines 79-86 mark VAL-MODEL-001 through VAL-MODEL-008 PASS; current HEAD lacks internal/api/deepseek_model_listing_test.go and sdk/cliproxy/service_deepseek_model_listing_test.go, and git merge-base --is-ancestor ce46507b9b3071869af6aa0e32a69917d50383f4 HEAD returned 1."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the reviewed handoff commit adds relevant DeepSeek model-listing tests, but the commit and its test files are absent from the current branch, so the claimed config-driven model-listing coverage is not actually present. I also noted a weaker credentialless negative inside the reviewed diff and two shared-state gaps around the missing go-compat-worker skill file and stale validation evidence."
+}

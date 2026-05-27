@@ -112,6 +112,26 @@ CLIProxyAPI separates downstream client authentication from upstream provider cr
 
 For OpenAI-compatible clients, use the local proxy `/v1` base URL, for example `http://127.0.0.1:8317/v1`, and send requests to paths such as `/chat/completions` with a local proxy API key.
 
+## DeepSeek with Factory Droid
+
+DeepSeek can be configured as an `openai-compatibility` provider and used by Factory Droid through the local proxy's generic OpenAI-compatible endpoint. Keep the top-level `api-keys` value for Droid/local clients, and put the upstream DeepSeek key only under the DeepSeek provider's `api-key-entries`.
+
+```yaml
+api-keys:
+  - "<LOCAL_PROXY_API_KEY>"
+
+openai-compatibility:
+  - name: "deepseek"
+    base-url: "https://api.deepseek.com"
+    api-key-entries:
+      - api-key: "<DEEPSEEK_API_KEY>"
+    models:
+      - name: "<DEEPSEEK_MODEL_ID>"
+        alias: "deepseek-v4"
+```
+
+Point Droid at the local proxy, for example `http://127.0.0.1:8318/v1`, with model `deepseek-v4` and the local proxy API key. After reloading the proxy, verify the alias with `GET /v1/models`; do not commit real keys or personal config contents.
+
 ## Usage Statistics
 
 Since v6.10.0, upstream CLIProxyAPI and [CPAMC](https://github.com/router-for-me/Cli-Proxy-API-Management-Center) no longer ship built-in usage statistics. CLIProxyAPIPlus preserves this workflow with its usage logger and the maintained [CPAMC dashboard fork](https://github.com/kaitranntt/Cli-Proxy-API-Management-Center), which is the default management panel release stream.
